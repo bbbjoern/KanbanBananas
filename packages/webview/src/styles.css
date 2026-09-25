@@ -1,0 +1,258 @@
+/* Colours come from the VS Code theme. The fallbacks are for the Vite dev server. */
+:root {
+  --bg: var(--vscode-editor-background, #1f1f1f);
+  --fg: var(--vscode-foreground, #cccccc);
+  --muted: var(--vscode-descriptionForeground, #9d9d9d);
+  --column-bg: var(--vscode-sideBar-background, #181818);
+  --card-bg: var(--vscode-editorWidget-background, #252526);
+  --card-hover: var(--vscode-list-hoverBackground, #2a2d2e);
+  --border: var(--vscode-panel-border, #2b2b2b);
+  --focus: var(--vscode-focusBorder, #0078d4);
+  --badge-bg: var(--vscode-badge-background, #616161);
+  --badge-fg: var(--vscode-badge-foreground, #f8f8f8);
+  --error: var(--vscode-errorForeground, #f85149);
+  --warning: var(--vscode-editorWarning-foreground, #cca700);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: -1px;
+}
+
+.message {
+  padding: 16px;
+  color: var(--muted);
+}
+
+.message.error {
+  color: var(--error);
+}
+
+/* Layouts */
+
+.board.panel {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  height: 100vh;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.board.panel .column {
+  flex: 0 0 280px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.board.panel .column.collapsed {
+  flex-basis: auto;
+}
+
+.board.panel .cards {
+  overflow-y: auto;
+}
+
+.board.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+/* Columns */
+
+.column {
+  background: var(--column-bg);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--column-color, var(--border));
+  border-radius: 6px;
+  min-width: 0;
+}
+
+.column.broken {
+  --column-color: var(--error);
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  font-weight: 600;
+}
+
+.column-header .chevron {
+  width: 10px;
+  color: var(--muted);
+}
+
+.column-header .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--column-color);
+}
+
+.column-header .name {
+  flex: 1;
+}
+
+.column-header .count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+  font-size: 11px;
+  font-weight: normal;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.broken-note {
+  margin: 0 2px 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Cards */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.card:hover {
+  background: var(--card-hover);
+}
+
+.compact .card {
+  gap: 4px;
+  padding: 6px 8px;
+}
+
+.card-top:empty {
+  display: none;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.title {
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.excerpt {
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.filename {
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  overflow-wrap: anywhere;
+}
+
+.priority,
+.label,
+.due,
+.epic,
+.assignee {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.priority {
+  text-transform: capitalize;
+  font-weight: 600;
+  color: #fff;
+}
+
+.priority-critical { background: #dc2626; }
+.priority-high { background: #ea580c; }
+.priority-medium { background: #ca8a04; }
+.priority-low { background: #16a34a; }
+
+.label {
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+}
+
+.label.more {
+  background: none;
+  color: var(--muted);
+}
+
+.due { border: 1px solid var(--border); }
+.due-overdue { color: var(--error); border-color: var(--error); }
+.due-today { color: var(--warning); border-color: var(--warning); }
+
+.epic { border: 1px dashed var(--border); }
+.assignee { color: var(--muted); }
+
+.warning {
+  margin-left: auto;
+  color: var(--warning);
+}
+
+.problems {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--error);
+  font-size: 12px;
+}

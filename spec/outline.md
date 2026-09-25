@@ -142,7 +142,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 | | Scope | Exit criterion |
 |---|---|---|
 | **M0** | `core` + corpus tests Round trip byte-identical on all 108 cards; synthetic damaged fixtures rejected. **Done 2026-09-25.** |
-| **M1** | Read-only board | Renders your real board identically; run it for a few days |
+| **M1** | Read-only board | Renders your real board identically; run it for a few days. **Built 2026-09-25; trial run in progress.** |
 | **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green |
 | **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on |
 | **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green |

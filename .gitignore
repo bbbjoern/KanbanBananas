@@ -4,3 +4,6 @@ dist/
 .DS_Store
 # Real-board snapshot for corpus tests; kept out of git (see packages/core/test/corpus/README.md)
 packages/core/test/corpus/features/
+# Dev-server snapshot of a real board (packages/extension/scripts/dev-board.mjs)
+packages/webview/public/dev-board.json
+packages/extension/*.vsix

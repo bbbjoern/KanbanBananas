@@ -1,0 +1,6 @@
+**
+!package.json
+!dist/extension.js
+!dist/webview/index.js
+!dist/webview/index.css
+!media/**
