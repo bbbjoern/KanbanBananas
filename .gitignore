@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.vsix
+.DS_Store
+# Real-board snapshot for corpus tests; kept out of git (see packages/core/test/corpus/README.md)
+packages/core/test/corpus/features/

@@ -40,7 +40,7 @@ Root causes found in its source:
 
 - **Layout:** `.devtool/features/*.md` for every status except `done`, which goes in `done/*.md`. Archived cards go in `archived/`, which doesn't exist yet. Current count: 60 active, 48 done.
 - **Frontmatter:** `id, status, priority, assignee, epic, dueDate, created, modified, completedAt, labels, order`. Values are double-quoted strings or `null`, and `labels` is an inline array. No other keys exist today, but unknown keys must be preserved.
-- **Statuses in use:** `backlog` 15, `todo` 24, `in-progress` 7, `review` 12, `done` 48. Columns are configurable.
+- **Statuses in use** (corpus snapshot, 2026-09-25): `backlog` 15, `todo` 25, `in-progress` 8, `review` 12, `done` 48. Columns are configurable.
 - **Order:** fractional-index strings in base 62 (`"a1"`, `"Zl"`, `"ZSV"`), as produced by the `fractional-indexing` package. Duplicates exist (three cards share `"Zl"`), so sort by `order`, then `created`, then `id`. Only rewrite a card's key when that card is moved.
 - **Title:** the first `# ` heading in the body. A body can be just the title with no trailing newline.
 - **Filename:** `<slug>-<YYYY-MM-DD>.md`, where the slug is lowercase `[a-z0-9-]` and at most 50 characters. Other patterns can be configured. `id` must equal the filename.
@@ -55,10 +55,11 @@ packages/
               filenames, search index. Everything testable without VS Code.
   extension/  CardStore + I/O adapters (buffer / atomic fs), watcher, commands,
               board webview host, sidebar view, frontmatter header panel,
-              AI launcher, settings, l10n
+              settings, CLI socket server, "Install / update agent skill"
   webview/    React board: columns, drag and drop, detail pane, filters
-  cli/        `kanban check | ls | move | new`: same core, for agents and a
-              pre-commit hook
+  cli/        `kanban find | show | ls | new | note | move | set | edit | check`:
+              same core, for agents and a pre-commit hook; bundled into the
+              agent skill (§12)
 ```
 
 The CLI gets its own package because agents edit cards too; the old extension's workflow even ships a `kanban-skill` for this. Giving agents the same safe write path closes the last uncoordinated writer.
@@ -82,7 +83,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - [ ] Assignee, epic, labels (up to 3 shown, then "+N more")
 - [ ] Due date with relative formatting (Overdue, Today, Tomorrow, `5d`)
 - [ ] Automatic `created`, `modified` and `completedAt`
-- [ ] Settings to show or hide each of: priority, assignee, due date, labels, epic, filename, Build with AI
+- [ ] Settings to show or hide each of: priority, assignee, due date, labels, epic, filename
 - [ ] Add new cards to the top or the bottom of a column
 - [ ] Filename pattern setting, plus a migration that renames existing files when the pattern changes
 
@@ -101,12 +102,11 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - [ ] Rename and delete labels across all cards
 - [ ] Delete a card
 
-**AI**
-- [ ] "Build with AI" from a card and from the editor title bar: launches Claude Code, Codex, Copilot or OpenCode in a terminal with the card's context. For Claude Code and Codex the permission mode is selectable.
-
 **Configuration**
-- [ ] Features directory, default priority and status, agent choice
-- [ ] Localisation: en, es, pt (see open questions)
+- [ ] Features directory, default priority and status
+- [ ] English only; no localisation
+
+**Dropped from parity:** "Build with AI" (the terminal launcher for Claude Code, Codex, Copilot and OpenCode) is not needed. Agents work through the CLI and skill (§12) instead.
 
 ## 6. Beyond parity (from the failures above)
 
@@ -115,14 +115,23 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Conflict prompt** when a card changes on disk while it's open in the inline editor: offer keep mine, take theirs, or diff.
 - **"Not in git" marker** on cards git doesn't track yet, since git is the only real backup.
 - **Pre-commit hook** running `kanban check`.
+- **Agent writes** go through the same store as the board and are covered by the same guarantees (§12).
 
 ## 7. Decision: the inline editor
 
-Tiptap WYSIWYG can't round-trip markdown without loss. My recommendation: use CodeMirror 6 with markdown mode and a rendered preview toggle. It's lossless and keeps the split-view workflow. If you want WYSIWYG anyway, gate it behind a test requiring that parse → edit nothing → serialize returns every card in the corpus byte-for-byte unchanged.
+**Decided: CodeMirror 6, live-preview style, with a toggle to plain source.** WYSIWYG (Tiptap) is out: it rewrites markdown on save, which adds formatting-only noise to git diffs and reformats notes that agents add through the CLI.
+
+- **Live preview:** the document is always plain markdown text. Decorations hide markup except on the line with the cursor, render headings and emphasis, and draw task checkboxes that toggle `[ ]` ↔ `[x]` in the text. Nothing is ever written that the user didn't type.
+- **Cursor stability is a hard requirement.** The old editor's cursor jumped to the end of the document, which made it unusable. The usual cause is resetting the whole document on every update or re-render. So:
+  - The editor is uncontrolled. React never passes the document back in as a prop, and re-renders never touch its content.
+  - Changes from outside (a board move, an agent note, a change on disk) are applied as minimal CodeMirror transactions built from a text diff. Positions are mapped through them, so the cursor, selection, scroll position and undo history stay where they were. The document is never replaced wholesale.
+  - The editor's own autosaves are recognised by content hash (§2.7) and are not applied back to it.
+  - Frontmatter edits from the board don't touch the editor's text at all, because the inline editor shows the body only.
+- **Tests:** type in the middle of a card while autosave runs, while the board moves the card, and while an agent appends a note. The cursor and selection must stay put and no keystroke may be lost.
 
 ## 8. Testing
 
-- **Corpus:** a snapshot of today's `.devtool/features` (106 valid cards). Parse → serialize must be byte-identical for every one. The 2 broken files serve as negative fixtures.
+- **Corpus:** a snapshot of `.devtool/features` in `packages/core/test/corpus/features/` (git-ignored). Taken on 2026-09-25 after the damaged cards were repaired: 108 cards, all valid. Parse → serialize must be byte-identical for every one. The damaged cases (a 0-byte file, a file with no frontmatter, `id: "C"`) are reproduced as synthetic negative fixtures in `packages/core/test/fixtures/broken/`.
 - **Patch tests:** each frontmatter operation changes exactly the expected lines. Assert on the diff.
 - **Atomicity:** kill the process between the temp-file write and the rename; the original file must be intact.
 - **Concurrency:** simulate interleaved writers (board, editor, CLI). No write may be lost or torn.
@@ -132,31 +141,36 @@ Tiptap WYSIWYG can't round-trip markdown without loss. My recommendation: use Co
 
 | | Scope | Exit criterion |
 |---|---|---|
-| **M0** | `core` + corpus tests | Round trip byte-identical on all 106 cards |
+| **M0** | `core` + corpus tests Round trip byte-identical on all 108 cards; synthetic damaged fixtures rejected. **Done 2026-09-25.** |
 | **M1** | Read-only board | Renders your real board identically; run it for a few days |
 | **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green |
-| **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers green |
+| **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on |
+| **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green |
 | **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections |
-| **M5** | Archive, bulk moves, Build with AI, settings, l10n | Full parity checklist |
-| **M6** | CLI, pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
+| **M5** | Archive, bulk moves, settings | Full parity checklist |
+| **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
+
+The CLI and skill sit at M2b, right after frontmatter writes, because agents write cards every session and need the safe path from the start.
 
 ## 10. Cutover
 
 1. **Never run both extensions on the same folder.** That recreates the two-writer bug. Disable the old one before the new one does its first write.
-2. **Repair the known-damaged cards first:**
+2. **Repair the known-damaged cards first.** Done before the 2026-09-25 corpus snapshot; the snapshot has no damaged cards. For the record:
    - `new-module-subtitles-2026-09-01.md`: 0 bytes. The last good version is at commit `2dec84d`.
    - `parser-add-click-on-word-to-display-alternatives-2026-06-15.md`: no frontmatter, and its body belongs to a different card. The last good version is at `a538b01`.
    - `feature-full-pass-2026-08-25.md`: `id: "C"`. Its `status: "backlog"` may also be a substituted default.
 3. Use a new settings namespace and import `kanban-markdown.*` once on first run.
+4. Delete `.agents/skills/kanban-markdown/` when the new skill is installed. Otherwise agents keep writing files by hand alongside it.
 
 ## 11. Open questions
 
-- Is localisation (es/pt) needed, or English only? -> English only
-- Inline editor: CodeMirror (recommended) or WYSIWYG with gating tests?
-- Private VSIX, or publish to the Marketplace / Open VSX?
-- Keep "Build with AI" for all four agents, or Claude Code only? -> not needed
+- Private VSIX, or publish to the Marketplace / Open VSX? (Needed by M6.)
 
---
+**Resolved**
+- Localisation: English only.
+- "Build with AI": not needed; dropped from parity.
+- Inline editor: CodeMirror 6 with live preview (§7).
+- `id` is the filename without `.md` (all 108 corpus cards).
 
 ---
 
@@ -206,11 +220,3 @@ Run scenarios against a fixture board and assert with `kanban check` plus a diff
 - Add a note to a card that has moved to `done/`: it lands in `done/`, and no new file appears.
 - Create a card: the result is byte-identical to one the board creates.
 - Edit with an outdated `--expect-mtime`: refused, and the file is unchanged.
-
----
-
-**Amendments to your existing sections**
-- **§4 Architecture:** in the `cli/` line, add "bundled into the agent skill (§12)".
-- **§6 Beyond parity:** agent writes go through the same store as the board and are covered by the same guarantees.
-- **§9 Milestones:** move the CLI and skill from M6 to **M2b**, right after frontmatter writes. Agents write cards every session here, so they need the safe path from the start, not at the end.
-- **§10 Cutover:** delete `.agents/skills/kanban-markdown/` when the new skill is installed. Otherwise agents keep writing files by hand alongside it.
