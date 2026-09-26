@@ -1,15 +1,17 @@
-import type { HostMessage } from '@kanban-bananas/core';
+import type { CreateIntent, HostMessage, MoveIntent, SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
+import { CardStore } from './cardStore.js';
 import { readSettings, SECTION, type Settings } from './settings.js';
 
 /**
  * Owns the board for the workspace: finds the features folder, keeps a
- * BoardSource on it, and tells webviews when to redraw. Read-only (M1).
+ * BoardSource and the CardStore on it, and tells webviews when to redraw.
  */
 export class BoardController implements vscode.Disposable {
   private settings: Settings = readSettings();
   private source: BoardSource | undefined;
+  private store: CardStore | undefined;
   private sourceSub: vscode.Disposable | undefined;
   private problem: string | undefined;
   private readonly changed = new vscode.EventEmitter<void>();
@@ -34,6 +36,7 @@ export class BoardController implements vscode.Disposable {
     this.sourceSub?.dispose();
     this.source?.dispose();
     this.source = undefined;
+    this.store = undefined;
     this.problem = undefined;
 
     const root = await this.findRoot();
@@ -44,6 +47,7 @@ export class BoardController implements vscode.Disposable {
     }
     const source = new BoardSource(root, () => this.settings.view.columns.map((c) => c.id));
     this.source = source;
+    this.store = new CardStore(source);
     this.sourceSub = source.onDidChange(() => this.changed.fire());
     await source.reload();
   }
@@ -52,6 +56,49 @@ export class BoardController implements vscode.Disposable {
     if (this.problem) return { type: 'error', message: this.problem };
     if (!this.source) return { type: 'error', message: 'Loading…' };
     return { type: 'state', board: this.source.view(), settings: this.settings.view };
+  }
+
+  get settingsNow(): Settings {
+    return this.settings;
+  }
+
+  /** The store itself, for integration tests that need to see write errors. */
+  get cardStore(): CardStore | undefined {
+    return this.store;
+  }
+
+  /** The current board, for commands that need to look up cards. */
+  board() {
+    return this.source?.board();
+  }
+
+  move(intent: MoveIntent): Promise<void> {
+    return this.write((store) => store.move(intent));
+  }
+
+  setFields(intent: SetFieldsIntent): Promise<void> {
+    return this.write((store) => store.setFields(intent));
+  }
+
+  create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<void> {
+    const full = { ...intent, top: this.settings.view.addNewCardsToTop, priority: this.settings.defaultPriority };
+    return this.write((store) => store.create(full).then(() => undefined));
+  }
+
+  /** Run a change; on failure, tell the user and redraw so optimistic UI snaps back. */
+  private async write(change: (store: CardStore) => Promise<void>): Promise<void> {
+    try {
+      if (!this.store) throw new Error('The board is not loaded.');
+      await change(this.store);
+    } catch (e) {
+      void vscode.window.showErrorMessage(`KanbanBananas: ${e instanceof Error ? e.message : String(e)}`);
+      this.changed.fire();
+    }
+  }
+
+  async openCardById(id: string): Promise<void> {
+    const card = this.board()?.cards.find((c) => c.card.fields.id === id);
+    if (card) await this.openCard(card.path);
   }
 
   async openCard(path: string): Promise<void> {

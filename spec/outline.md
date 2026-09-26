@@ -69,22 +69,22 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 ## 5. Feature parity checklist
 
 **Board**
-- [ ] Configurable columns (id, name, colour); default is the five statuses above
-- [ ] Drag and drop between and within columns
-- [ ] Editor panel plus activity-bar sidebar view
+- [x] Configurable columns (id, name, colour); default is the five statuses above
+- [x] Drag and drop between and within columns
+- [x] Editor panel plus activity-bar sidebar view
 - [ ] Horizontal and vertical layouts; board view mode
 - [ ] Collapsible columns; epic lanes with collapsible epics and epic colours
 - [ ] Compact mode, hide-scrollbar option
-- [ ] Keyboard shortcuts: `N` new, `Esc` close, `Cmd/Ctrl+Enter` submit
-- [ ] Follows the VS Code or Cursor theme (light and dark)
+- [x] Keyboard shortcuts: `N` new, `Esc` close, `Cmd/Ctrl+Enter` submit
+- [x] Follows the VS Code or Cursor theme (light and dark)
 
 **Cards**
-- [ ] Priority (critical/high/medium/low) with colour badges
-- [ ] Assignee, epic, labels (up to 3 shown, then "+N more")
-- [ ] Due date with relative formatting (Overdue, Today, Tomorrow, `5d`)
-- [ ] Automatic `created`, `modified` and `completedAt`
+- [x] Priority (critical/high/medium/low) with colour badges
+- [x] Assignee, epic, labels (up to 3 shown, then "+N more")
+- [x] Due date with relative formatting (Overdue, Today, Tomorrow, `5d`)
+- [x] Automatic `created`, `modified` and `completedAt`
 - [ ] Settings to show or hide each of: priority, assignee, due date, labels, epic, filename
-- [ ] Add new cards to the top or the bottom of a column
+- [x] Add new cards to the top or the bottom of a column
 - [ ] Filename pattern setting, plus a migration that renames existing files when the pattern changes
 
 **Search and filters**
@@ -143,12 +143,19 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 |---|---|---|
 | **M0** | `core` + corpus tests Round trip byte-identical on all 108 cards; synthetic damaged fixtures rejected. **Done 2026-09-25.** |
 | **M1** | Read-only board | Renders your real board identically; run it for a few days. **Built 2026-09-25; trial run in progress.** |
-| **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green |
+| **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green. **Done 2026-09-25**; see the M2 notes below. |
 | **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on |
 | **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green |
 | **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections |
 | **M5** | Archive, bulk moves, settings | Full parity checklist |
 | **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
+
+**M2 notes (known limits, all from existing data or deliberate):**
+- **Duplicate order keys:** a card dropped between two cards that share a key (three cards share `"Zl"`) lands after the last of them. Neighbours are never re-keyed (§3).
+- **Non-standard keys:** a numeric `order: 0` isn't a valid fractional-index key, so it's skipped as a bound; nothing can be placed above it.
+- **Check-then-rename window:** the mtime/size check and the `rename()` are two steps, so an outside write landing in between (microseconds) can still be replaced. Inside the extension all writes are queued; the CLI closes the rest at M2b by routing through the extension's socket.
+- **Moves across `done/`:** the card is patched in place, then renamed. If the rename fails, the card is left with its new status in the old folder (a `wrong-folder` warning, nothing lost).
+- **Own-write detection (§2.7)** isn't needed yet: the board simply re-reads files it wrote. It becomes necessary with the inline editor in M3.
 
 The CLI and skill sit at M2b, right after frontmatter writes, because agents write cards every session and need the safe path from the start.
 

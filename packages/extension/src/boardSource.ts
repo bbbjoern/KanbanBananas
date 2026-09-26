@@ -1,4 +1,4 @@
-import { loadBoard, toBoardView, type BoardView } from '@kanban-bananas/core';
+import { loadBoard, toBoardView, type Board, type BoardView } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 
 /** Card files are `<root>/*.md` and `<root>/done/*.md`. `archived/` is not on the board. */
@@ -10,8 +10,9 @@ const EMIT_DEBOUNCE_MS = 50;
 const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /**
- * Read-only view of the card files. Keeps the latest text of each file,
- * re-reading one file at a time as the watcher reports changes.
+ * The latest text of every card file, re-read one file at a time as the
+ * watcher reports changes. A card open in an editor is read from its buffer,
+ * so the board shows unsaved edits and the board's own edits to them.
  */
 export class BoardSource implements vscode.Disposable {
   private readonly files = new Map<string, string>();
@@ -22,6 +23,7 @@ export class BoardSource implements vscode.Disposable {
   private readonly watcher: vscode.FileSystemWatcher;
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
+  private readonly subs: vscode.Disposable[] = [];
 
   constructor(
     readonly root: vscode.Uri,
@@ -35,6 +37,21 @@ export class BoardSource implements vscode.Disposable {
     this.watcher.onDidCreate(onEvent);
     this.watcher.onDidChange(onEvent);
     this.watcher.onDidDelete(onEvent);
+
+    const fromDocument = (doc: vscode.TextDocument) => {
+      const path = this.relativePath(doc.uri);
+      if (path === null) return;
+      this.files.set(path, doc.getText());
+      this.scheduleEmit();
+    };
+    this.subs.push(
+      vscode.workspace.onDidOpenTextDocument(fromDocument),
+      vscode.workspace.onDidChangeTextDocument((e) => fromDocument(e.document)),
+      vscode.workspace.onDidCloseTextDocument((doc) => {
+        const path = this.relativePath(doc.uri);
+        if (path !== null) this.scheduleRead(path);
+      }),
+    );
   }
 
   /** Read every card file from scratch. */
@@ -56,17 +73,37 @@ export class BoardSource implements vscode.Disposable {
     this.emit();
   }
 
+  /** Re-read these files now (after the board wrote them) and redraw. */
+  async refresh(paths: readonly string[]): Promise<void> {
+    await Promise.all(paths.map((p) => this.read(p)));
+    this.emit();
+  }
+
   has(path: string): boolean {
     return this.files.has(path);
+  }
+
+  paths(): string[] {
+    return [...this.files.keys()];
+  }
+
+  /** The open editor buffer for a card, if there is one. */
+  document(path: string): vscode.TextDocument | undefined {
+    const uri = this.uriFor(path).toString();
+    return vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri);
   }
 
   uriFor(path: string): vscode.Uri {
     return vscode.Uri.joinPath(this.root, ...path.split('/'));
   }
 
-  view(): BoardView {
+  board(): Board {
     const files = [...this.files].map(([path, text]) => ({ path, text }));
-    return toBoardView(loadBoard(files, { statuses: this.statuses() }));
+    return loadBoard(files, { statuses: this.statuses() });
+  }
+
+  view(): BoardView {
+    return toBoardView(this.board());
   }
 
   private relativePath(uri: vscode.Uri): string | null {
@@ -94,11 +131,13 @@ export class BoardSource implements vscode.Disposable {
   private async read(path: string): Promise<void> {
     const seq = (this.readSeq.get(path) ?? 0) + 1;
     this.readSeq.set(path, seq);
-    let text: string | undefined;
-    try {
-      text = decoder.decode(await vscode.workspace.fs.readFile(this.uriFor(path)));
-    } catch {
-      text = undefined; // deleted, or not readable
+    let text: string | undefined = this.document(path)?.getText();
+    if (text === undefined) {
+      try {
+        text = decoder.decode(await vscode.workspace.fs.readFile(this.uriFor(path)));
+      } catch {
+        text = undefined; // deleted, or not readable
+      }
     }
     if (this.readSeq.get(path) !== seq) return;
     if (text === undefined) this.files.delete(path);
@@ -117,6 +156,7 @@ export class BoardSource implements vscode.Disposable {
   dispose(): void {
     this.watcher.dispose();
     this.changed.dispose();
+    for (const s of this.subs) s.dispose();
     for (const t of this.timers.values()) clearTimeout(t);
     clearTimeout(this.emitTimer);
   }

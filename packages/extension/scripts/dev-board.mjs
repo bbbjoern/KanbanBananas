@@ -21,6 +21,7 @@ const message = {
   settings: {
     columns,
     compactMode: process.argv.includes('--compact'),
+    addNewCardsToTop: false,
     show: { priority: true, assignee: true, dueDate: true, labels: true, epic: true, filename: false },
   },
 };

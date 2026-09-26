@@ -42,6 +42,8 @@ export const DEFAULT_COLUMNS: readonly ColumnConfig[] = [
 export interface ViewSettings {
   columns: ColumnConfig[];
   compactMode: boolean;
+  /** New cards go to the top of their column instead of the bottom. */
+  addNewCardsToTop: boolean;
   show: {
     priority: boolean;
     assignee: boolean;
@@ -57,8 +59,12 @@ export type HostMessage =
   | { type: 'state'; board: BoardView; settings: ViewSettings }
   | { type: 'error'; message: string };
 
-/** Messages from the board webview to the extension host. The board is read-only in M1. */
-export type WebviewMessage = { type: 'ready' } | { type: 'openCard'; path: string };
+/** Messages from the board webview to the extension host: intents, never whole cards (spec §2.1). */
+export type WebviewMessage =
+  | { type: 'ready' }
+  | { type: 'openCard'; path: string }
+  | { type: 'move'; id: string; toStatus: string; beforeId: string | null }
+  | { type: 'create'; title: string; status: string };
 
 const EXCERPT_LENGTH = 160;
 

@@ -26,6 +26,10 @@ export function attachBoard(
         post(controller.state());
       } else if (m.type === 'openCard') {
         void controller.openCard(m.path);
+      } else if (m.type === 'move') {
+        void controller.move({ id: m.id, toStatus: m.toStatus, beforeId: m.beforeId });
+      } else if (m.type === 'create') {
+        void controller.create({ title: m.title, status: m.status });
       }
     }),
     controller.onDidChange(() => {

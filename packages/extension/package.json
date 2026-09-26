@@ -1,9 +1,9 @@
 {
   "name": "kanban-bananas",
-  "displayName": "Kanban Bananas",
+  "displayName": "KanbanBananas",
   "description": "A markdown kanban board that never corrupts your cards.",
   "version": "0.1.0",
-  "publisher": "bbbjoern",
+  "publisher": "hypertxt",
   "private": true,
   "license": "UNLICENSED",
   "repository": {
@@ -25,21 +25,56 @@
       {
         "command": "kanbanBananas.openBoard",
         "title": "Open Board",
-        "category": "Kanban Bananas",
+        "category": "KanbanBananas",
         "icon": "$(project)"
       },
       {
         "command": "kanbanBananas.reload",
         "title": "Reload Board",
-        "category": "Kanban Bananas",
+        "category": "KanbanBananas",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "kanbanBananas.card.setPriority",
+        "title": "Set Priority\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.editLabels",
+        "title": "Edit Labels\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.setDueDate",
+        "title": "Set Due Date\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.setAssignee",
+        "title": "Set Assignee\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.setEpic",
+        "title": "Set Epic\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.moveTo",
+        "title": "Move to\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.open",
+        "title": "Open File",
+        "category": "KanbanBananas"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "kanbanBananas",
-          "title": "Kanban Bananas",
+          "title": "KanbanBananas",
           "icon": "media/board.svg"
         }
       ]
@@ -65,10 +100,77 @@
           "when": "view == kanbanBananas.sidebar",
           "group": "navigation"
         }
+      ],
+      "webview/context": [
+        {
+          "command": "kanbanBananas.card.setPriority",
+          "when": "webviewSection == 'card'",
+          "group": "3_fields@0"
+        },
+        {
+          "command": "kanbanBananas.card.editLabels",
+          "when": "webviewSection == 'card'",
+          "group": "3_fields@1"
+        },
+        {
+          "command": "kanbanBananas.card.setDueDate",
+          "when": "webviewSection == 'card'",
+          "group": "3_fields@2"
+        },
+        {
+          "command": "kanbanBananas.card.setAssignee",
+          "when": "webviewSection == 'card'",
+          "group": "3_fields@3"
+        },
+        {
+          "command": "kanbanBananas.card.setEpic",
+          "when": "webviewSection == 'card'",
+          "group": "3_fields@4"
+        },
+        {
+          "command": "kanbanBananas.card.moveTo",
+          "when": "webviewSection == 'card'",
+          "group": "2_move@1"
+        },
+        {
+          "command": "kanbanBananas.card.open",
+          "when": "webviewSection == 'card'",
+          "group": "1_open@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "kanbanBananas.card.setPriority",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.editLabels",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.setDueDate",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.setAssignee",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.setEpic",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.moveTo",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.open",
+          "when": "false"
+        }
       ]
     },
     "configuration": {
-      "title": "Kanban Bananas",
+      "title": "KanbanBananas",
       "properties": {
         "kanbanBananas.featuresDirectory": {
           "type": "string",
@@ -129,6 +231,22 @@
           "default": false,
           "description": "Smaller cards without the body excerpt."
         },
+        "kanbanBananas.addNewCardsToTop": {
+          "type": "boolean",
+          "default": false,
+          "description": "Add new cards to the top of their column instead of the bottom."
+        },
+        "kanbanBananas.defaultPriority": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ],
+          "default": "medium",
+          "description": "Priority for new cards."
+        },
         "kanbanBananas.showPriority": {
           "type": "boolean",
           "default": true,
@@ -168,7 +286,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "package": "npm run build && vsce package --no-dependencies --skip-license --out kanban-bananas.vsix",
     "dev-board": "npm run build -w @kanban-bananas/core && node scripts/dev-board.mjs",
-    "test:integration": "npm run build && node test/run.mjs"
+    "test:integration": "npm run build && node test/run.mjs",
+    "test": "vitest run test/unit"
   },
   "dependencies": {
     "@kanban-bananas/core": "*"

@@ -1,17 +1,32 @@
-/* Colours come from the VS Code theme. The fallbacks are for the Vite dev server. */
+/*
+ * Flat, quiet IDE look: tinted surfaces instead of borders, small type,
+ * colour only as accents. Every colour derives from the VS Code theme, so
+ * light and dark themes both work. Fallbacks are for the Vite dev server.
+ */
 :root {
-  --bg: var(--vscode-editor-background, #1f1f1f);
-  --fg: var(--vscode-foreground, #cccccc);
-  --muted: var(--vscode-descriptionForeground, #9d9d9d);
-  --column-bg: var(--vscode-sideBar-background, #181818);
-  --card-bg: var(--vscode-editorWidget-background, #252526);
-  --card-hover: var(--vscode-list-hoverBackground, #2a2d2e);
-  --border: var(--vscode-panel-border, #2b2b2b);
-  --focus: var(--vscode-focusBorder, #0078d4);
-  --badge-bg: var(--vscode-badge-background, #616161);
-  --badge-fg: var(--vscode-badge-foreground, #f8f8f8);
-  --error: var(--vscode-errorForeground, #f85149);
-  --warning: var(--vscode-editorWarning-foreground, #cca700);
+  --bg: var(--vscode-sideBar-background, #1e1f22);
+  --fg: var(--vscode-foreground, #dfe1e5);
+  --muted: var(--vscode-descriptionForeground, #8c8f94);
+  --accent: var(--vscode-focusBorder, #3574f0);
+  --error: var(--vscode-errorForeground, #f75464);
+  --warning: var(--vscode-editorWarning-foreground, #e5a50a);
+
+  /* Surfaces: mixed from the foreground so they suit any theme. */
+  --column-bg: color-mix(in srgb, var(--fg) 4%, var(--bg));
+  --card-bg: var(--vscode-editor-background, #2b2d30);
+  --card-border: color-mix(in srgb, var(--fg) 9%, transparent);
+  --card-border-hover: color-mix(in srgb, var(--fg) 22%, transparent);
+  --chip-bg: color-mix(in srgb, var(--fg) 9%, transparent);
+  --hover: color-mix(in srgb, var(--fg) 8%, transparent);
+
+  --radius: 6px;
+  --gap: 8px;
+
+  /* Priority accents: muted, readable on light and dark. */
+  --p-critical: #e5484d;
+  --p-high: #e8833a;
+  --p-medium: #c9a227;
+  --p-low: #4aa46a;
 }
 
 * {
@@ -25,6 +40,7 @@ body {
   color: var(--fg);
   font-family: var(--vscode-font-family, system-ui, sans-serif);
   font-size: var(--vscode-font-size, 13px);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -37,9 +53,15 @@ button {
   cursor: pointer;
 }
 
-button:focus-visible {
-  outline: 1px solid var(--focus);
-  outline-offset: -1px;
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Thin, unobtrusive scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg) 18%, transparent) transparent;
 }
 
 .message {
@@ -55,7 +77,7 @@ button:focus-visible {
 
 .board.panel {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
   height: 100vh;
   padding: 12px;
@@ -63,7 +85,7 @@ button:focus-visible {
 }
 
 .board.panel .column {
-  flex: 0 0 280px;
+  flex: 0 0 272px;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -80,63 +102,97 @@ button:focus-visible {
 .board.sidebar {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 4px;
+  padding: 4px 6px;
 }
 
-/* Columns */
+.board.sidebar .column {
+  background: none;
+}
+
+/* Columns: a tinted surface, no border, no colour bar. */
 
 .column {
   background: var(--column-bg);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--column-color, var(--border));
-  border-radius: 6px;
+  border-radius: 8px;
   min-width: 0;
 }
 
 .column.broken {
   --column-color: var(--error);
+  background: color-mix(in srgb, var(--error) 7%, var(--bg));
 }
 
 .column-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px 10px;
-  font-weight: 600;
+  padding: 2px 4px 0 0;
+}
+
+.column-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 6px 8px 10px;
+  border-radius: var(--radius);
 }
 
 .column-header .chevron {
-  width: 10px;
+  width: 8px;
   color: var(--muted);
+  font-size: 10px;
 }
 
 .column-header .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--column-color);
+  flex: none;
 }
 
 .column-header .name {
-  flex: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .column-header .count {
-  padding: 0 6px;
-  border-radius: 8px;
-  background: var(--badge-bg);
-  color: var(--badge-fg);
-  font-size: 11px;
-  font-weight: normal;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.column-header .add {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.column:hover .add,
+.column-header .add:focus-visible {
+  opacity: 1;
+}
+
+.column-header .add:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .cards {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 0 8px 8px;
+  min-height: 32px; /* so an empty column still takes drops */
+  padding: 2px 8px 8px;
 }
 
 .broken-note {
@@ -145,47 +201,59 @@ button:focus-visible {
   font-size: 12px;
 }
 
-/* Cards */
+/* Cards: flat, hairline border, border brightens on hover. */
 
 .card {
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  padding: 10px;
+  padding: 10px 12px;
   background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  transition: border-color 0.12s;
 }
 
 .card:hover {
-  background: var(--card-hover);
+  border-color: var(--card-border-hover);
 }
 
 .compact .card {
-  gap: 4px;
-  padding: 6px 8px;
+  gap: 5px;
+  padding: 7px 10px;
 }
 
-.card-top:empty {
-  display: none;
-}
-
-.card-top {
+.title-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
 }
 
 .title {
-  font-weight: 600;
-  line-height: 1.35;
+  flex: 1;
+  font-weight: 500;
+  line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.warning {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
 }
 
 .excerpt {
   color: var(--muted);
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -195,8 +263,10 @@ button:focus-visible {
 .meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  gap: 4px 8px;
   font-size: 11px;
+  color: var(--muted);
 }
 
 .filename {
@@ -206,48 +276,75 @@ button:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.priority,
-.label,
-.due,
-.epic,
-.assignee {
-  padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 11px;
+/* Priority: a coloured dot and a word, no filled badge. */
+
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: capitalize;
+}
+
+.pdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--p-color, var(--muted));
+}
+
+.priority-critical { --p-color: var(--p-critical); color: var(--p-critical); font-weight: 600; }
+.priority-high { --p-color: var(--p-high); }
+.priority-medium { --p-color: var(--p-medium); }
+.priority-low { --p-color: var(--p-low); }
+
+.label {
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  color: var(--fg);
   line-height: 16px;
 }
 
-.priority {
-  text-transform: capitalize;
-  font-weight: 600;
-  color: #fff;
-}
-
-.priority-critical { background: #dc2626; }
-.priority-high { background: #ea580c; }
-.priority-medium { background: #ca8a04; }
-.priority-low { background: #16a34a; }
-
-.label {
-  background: var(--badge-bg);
-  color: var(--badge-fg);
-}
-
 .label.more {
+  padding: 0;
   background: none;
   color: var(--muted);
 }
 
-.due { border: 1px solid var(--border); }
-.due-overdue { color: var(--error); border-color: var(--error); }
-.due-today { color: var(--warning); border-color: var(--warning); }
+.due-overdue { color: var(--error); font-weight: 600; }
+.due-today { color: var(--warning); font-weight: 600; }
+.due-soon { color: var(--fg); }
 
-.epic { border: 1px dashed var(--border); }
-.assignee { color: var(--muted); }
+.epic::before {
+  content: '◆ ';
+  font-size: 9px;
+}
 
-.warning {
-  margin-left: auto;
-  color: var(--warning);
+/* New card input */
+
+.new-card {
+  width: 100%;
+  resize: vertical;
+  padding: 9px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--vscode-input-background, var(--card-bg));
+  color: var(--vscode-input-foreground, var(--fg));
+  font: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Drag and drop */
+
+.drag-source {
+  opacity: 0.3;
+}
+
+.card.dragging {
+  cursor: grabbing;
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .problems {

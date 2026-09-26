@@ -1,6 +1,7 @@
 import type { HostMessage } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { attachBoard, webviewOptions } from './boardWebview.js';
+import { registerCardCommands } from './cardCommands.js';
 import { BoardController } from './controller.js';
 
 let panel: vscode.WebviewPanel | undefined;
@@ -9,6 +10,7 @@ let panel: vscode.WebviewPanel | undefined;
 export interface ExtensionApi {
   ready: Promise<void>;
   state: () => HostMessage;
+  controller: BoardController;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -35,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
 
     vscode.commands.registerCommand('kanbanBananas.reload', () => controller.start()),
+    registerCardCommands(controller),
 
     vscode.window.registerWebviewViewProvider('kanbanBananas.sidebar', {
       resolveWebviewView(view) {
@@ -45,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
   );
 
-  return { ready, state: () => controller.state() };
+  return { ready, state: () => controller.state(), controller };
 }
 
 export function deactivate(): void {}

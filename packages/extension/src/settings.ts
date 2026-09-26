@@ -7,6 +7,7 @@ const LEGACY_SECTION = 'kanban-markdown';
 
 export interface Settings {
   featuresDirectory: string;
+  defaultPriority: string;
   view: ViewSettings;
 }
 
@@ -24,9 +25,11 @@ export function readSettings(): Settings {
 
   return {
     featuresDirectory: get<string>('featuresDirectory'),
+    defaultPriority: get<string>('defaultPriority'),
     view: {
       columns: validColumns(get<unknown>('columns')),
       compactMode: get<boolean>('compactMode'),
+      addNewCardsToTop: get<boolean>('addNewCardsToTop'),
       show: {
         priority: get<boolean>('showPriority'),
         assignee: get<boolean>('showAssignee'),
