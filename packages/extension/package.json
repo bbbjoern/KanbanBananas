@@ -84,7 +84,7 @@
         {
           "type": "webview",
           "id": "kanbanBananas.sidebar",
-          "name": "Board"
+          "name": "KanbanBananas"
         }
       ]
     },

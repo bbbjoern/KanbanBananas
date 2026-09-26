@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
         panel.reveal();
         return;
       }
-      panel = vscode.window.createWebviewPanel('kanbanBananas.board', 'Kanban', vscode.ViewColumn.Active, {
+      panel = vscode.window.createWebviewPanel('kanbanBananas.board', 'KanbanBananas', vscode.ViewColumn.Active, {
         ...webviewOptions(context.extensionUri),
         retainContextWhenHidden: true,
       });
