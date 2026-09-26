@@ -2,6 +2,7 @@ import { generateKeyBetween } from 'fractional-indexing';
 import type { Board, BoardCard } from './board.js';
 import { cardFilename, idForFilename } from './filenames.js';
 import { compareCards } from './order.js';
+import { noteSection } from './edit.js';
 import type { FieldValue } from './patch.js';
 import { DONE_DIR, DONE_STATUS } from './validate.js';
 
@@ -34,6 +35,8 @@ export interface CreateIntent {
   labels?: string[];
   /** Add at the top of the column instead of the bottom. */
   top?: boolean;
+  /** Body text after the title. */
+  body?: string;
 }
 
 export interface Plan {
@@ -42,6 +45,24 @@ export interface Plan {
   changes: Record<string, FieldValue>;
   /** Directory the card must end up in, when it has to move (into or out of `done/`). */
   toDir?: string;
+  /** Text to add at the end of the body. */
+  append?: string;
+  /** Replacement for the whole body. */
+  body?: string;
+  /** Refuse unless the file's mtime is exactly this (the version the caller read). */
+  expectMtimeMs?: number;
+}
+
+export interface NoteIntent {
+  id: string;
+  heading: string;
+  body?: string;
+}
+
+export interface EditBodyIntent {
+  id: string;
+  body: string;
+  expectMtimeMs: number;
 }
 
 export class IntentError extends Error {
@@ -99,6 +120,29 @@ export function planSetFields(board: Board, intent: SetFieldsIntent, now: Date):
   return { path: card.path, changes };
 }
 
+export function planNote(board: Board, intent: NoteIntent, now: Date): Plan {
+  const card = findCard(board, intent.id);
+  return { path: card.path, changes: { modified: now.toISOString() }, append: noteSection(intent.heading, intent.body) };
+}
+
+export function planEditBody(board: Board, intent: EditBodyIntent, now: Date): Plan {
+  const card = findCard(board, intent.id);
+  return {
+    path: card.path,
+    changes: { modified: now.toISOString() },
+    body: intent.body,
+    expectMtimeMs: intent.expectMtimeMs,
+  };
+}
+
+/** The id of the card right after `afterId` in its column, for "move after" (null: it's last). */
+export function idAfter(board: Board, status: string, afterId: string): string | null {
+  const column = columnCards(board, status);
+  const i = column.findIndex((c) => c.card.fields.id === afterId);
+  if (i === -1) throw new IntentError(`No card "${afterId}" in column "${status}".`);
+  return column[i + 1]?.card.fields.id ?? null;
+}
+
 export interface NewCard {
   /** Path relative to the features directory. */
   path: string;
@@ -143,8 +187,10 @@ export function planCreate(board: Board, intent: CreateIntent, now: Date, taken:
     '---',
     `# ${title}`,
   ].join('\n');
+  const body = intent.body?.replace(/\s+$/, '');
+  const full = body ? `${text}\n\n${body}\n` : text;
 
-  return { path: dir ? `${dir}/${id}.md` : `${id}.md`, id, text };
+  return { path: dir ? `${dir}/${id}.md` : `${id}.md`, id, text: full };
 }
 
 /** Cards in a column, in board order. */

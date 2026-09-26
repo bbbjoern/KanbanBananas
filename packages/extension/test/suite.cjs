@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vscode = require('vscode');
+const { execFileSync } = require('node:child_process');
 
 const EXT_ID = 'hypertxt.kanban-bananas';
 const api = () => vscode.extensions.getExtension(EXT_ID).exports;
@@ -164,8 +165,8 @@ const tests = {
   },
 
   async 'create writes a new card in the old format and never overwrites'() {
-    const a = await store().create({ title: 'Fresh idea', status: 'todo' });
-    const b = await store().create({ title: 'Fresh idea', status: 'todo' });
+    const a = (await store().create({ title: 'Fresh idea', status: 'todo' })).path;
+    const b = (await store().create({ title: 'Fresh idea', status: 'todo' })).path;
     assert.notEqual(a, b);
     assert.match(b, /-2\.md$/);
     const text = disk(a);
@@ -196,7 +197,119 @@ const tests = {
     assert.equal(disk(rel), '', 'wrote to a broken file');
     fs.writeFileSync(path.join(features(), rel), good);
   },
+
+  async 'CLI: the running extension records its socket'() {
+    const record = JSON.parse(fs.readFileSync(path.join(features(), '../.kanban.sock'), 'utf8'));
+    assert.ok(fs.existsSync(record.socket), 'socket missing');
+    assert.equal(record.pid, process.pid);
+  },
+
+  async 'CLI: a note on a card open with unsaved edits goes into the buffer, not over it'() {
+    const id = 'add-login-page-2026-09-01';
+    const rel = cardIn(id).path;
+    const onDisk = disk(rel);
+    const doc = await vscode.workspace.openTextDocument(uri(rel));
+    const editor = await vscode.window.showTextDocument(doc);
+    await editor.edit((e) => e.insert(doc.positionAt(doc.getText().length), '\nUSER TYPING'));
+
+    const out = await kanban(['note', id, '--heading', 'Done — from an agent', '--body', '-', '--json'], 'Agent text.\n');
+    const result = JSON.parse(out);
+    assert.equal(result.via, 'vscode');
+    assert.equal(result.unsaved, true);
+
+    const text = doc.getText();
+    assert.ok(text.includes('USER TYPING'), 'user edit lost');
+    assert.ok(text.includes('## Done — from an agent\n\nAgent text.'), 'note missing from buffer');
+    assert.equal(disk(rel), onDisk, 'disk changed before save');
+    await doc.save();
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  },
+
+  async 'CLI: move through the extension renames into done/'() {
+    const out = JSON.parse(await kanban(['move', 'add-login-page-2026-09-01', 'done', '--json']));
+    assert.equal(out.via, 'vscode');
+    assert.ok(out.path.endsWith('done/add-login-page-2026-09-01.md'));
+    assert.match(disk('done/add-login-page-2026-09-01.md'), /status: "done"/);
+  },
+
+  async 'CLI: edit with a stale mtime is refused through the extension too'() {
+    const shown = JSON.parse(await kanban(['show', 'numeric-order-2026-09-05', '--json']));
+    const before = disk('numeric-order-2026-09-05.md');
+    const r = await kanbanResult(['edit', shown.id, '--body', '# X', '--expect-mtime', String(shown.mtimeMs - 1000)]);
+    assert.equal(r.code, 3, r.err);
+    assert.match(r.err, /conflict/);
+    assert.equal(disk('numeric-order-2026-09-05.md'), before);
+  },
+
+  async 'installs the agent skill, and its launcher runs the CLI'() {
+    await vscode.commands.executeCommand('kanbanBananas.installSkill');
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const dir = path.join(root, '.claude/skills/kanban');
+    const skill = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8');
+    assert.ok(!skill.includes('{{'), 'placeholders left in SKILL.md');
+    assert.ok(skill.includes('.claude/skills/kanban/scripts/kanban find'), 'command path not filled in');
+    assert.match(skill, /^---\nname: kanban\n/);
+    const version = vscode.extensions.getExtension(EXT_ID).packageJSON.version;
+    assert.equal(fs.readFileSync(path.join(dir, 'VERSION'), 'utf8').trim(), version);
+    assert.ok(fs.statSync(path.join(dir, 'scripts/kanban')).mode & 0o100, 'launcher not executable');
+    const out = execFileSync(path.join(dir, 'scripts/kanban'), ['check'], { cwd: root, encoding: 'utf8' });
+    assert.match(out, /cards OK, 0 error/);
+  },
+
+  async 'the skill follows the agentsMayMoveCards setting, and the CLI enforces it'() {
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const dir = path.join(root, '.claude/skills/kanban');
+    const config = vscode.workspace.getConfiguration('kanbanBananas');
+
+    let skill = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8');
+    assert.ok(skill.includes('Never move a card to `done`'), 'default policy text missing');
+    assert.ok(!skill.includes('{{'), 'placeholders left');
+
+    await config.update('agentsMayMoveCards', 'never', vscode.ConfigurationTarget.Workspace);
+    const updated = await waitFor(() => fs.readFileSync(path.join(dir, 'policy.json'), 'utf8').includes('"never"'));
+    assert.ok(updated, 'policy.json not rewritten');
+    skill = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8');
+    assert.ok(skill.includes("Don't move cards between columns"), 'SKILL.md not rewritten for "never"');
+    assert.ok(!skill.includes('move <id> in-progress'), 'still tells agents to move cards');
+
+    const launcher = path.join(dir, 'scripts/kanban');
+    const r = await new Promise((resolve) => {
+      const child = require('node:child_process').spawn(launcher, ['move', 'numeric-order-2026-09-05', 'review'], { cwd: root });
+      let err = '';
+      child.stderr.on('data', (d) => (err += d));
+      child.on('close', (code) => resolve({ code, err }));
+    });
+    assert.equal(r.code, 4, r.err);
+    assert.match(r.err, /moves cards between columns themselves/);
+
+    await config.update('agentsMayMoveCards', undefined, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => fs.readFileSync(path.join(dir, 'policy.json'), 'utf8').includes('"notToDone"')));
+  },
 };
+
+/**
+ * Run the bundled CLI from the workspace root with a real Node, like an agent would.
+ * Asynchronously: the extension host has to keep serving the socket while the CLI waits.
+ */
+function kanbanResult(args, stdin) {
+  const { spawn } = require('node:child_process');
+  const cli = path.join(vscode.extensions.getExtension(EXT_ID).extensionPath, 'dist/skill/kanban.mjs');
+  return new Promise((resolve) => {
+    const child = spawn('node', [cli, ...args], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (err += d));
+    child.on('close', (code) => resolve({ code, out, err }));
+    child.stdin.end(stdin ?? '');
+  });
+}
+
+async function kanban(args, stdin) {
+  const r = await kanbanResult(args, stdin);
+  if (r.code !== 0) throw new Error(`kanban ${args[0]} exited ${r.code}: ${r.err}`);
+  return r.out;
+}
 
 exports.run = async function run() {
   const failures = [];

@@ -6,3 +6,6 @@ export * from './validate.js';
 export * from './view.js';
 export * from './ops.js';
 export * from './patch.js';
+export * from './edit.js';
+export * from './cliProtocol.js';
+export * from './agentPolicy.js';

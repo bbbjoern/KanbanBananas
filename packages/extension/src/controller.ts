@@ -2,6 +2,8 @@ import type { CreateIntent, HostMessage, MoveIntent, SetFieldsIntent } from '@ka
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
+import { CliServer } from './cliServer.js';
+import { log } from './log.js';
 import { readSettings, SECTION, type Settings } from './settings.js';
 
 /**
@@ -12,13 +14,14 @@ export class BoardController implements vscode.Disposable {
   private settings: Settings = readSettings();
   private source: BoardSource | undefined;
   private store: CardStore | undefined;
+  private cliServer: CliServer | undefined;
   private sourceSub: vscode.Disposable | undefined;
   private problem: string | undefined;
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   private readonly subs: vscode.Disposable[] = [];
 
-  constructor() {
+  constructor(private readonly version: string) {
     this.subs.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (!e.affectsConfiguration(SECTION) && !e.affectsConfiguration('kanban-markdown')) return;
@@ -35,11 +38,14 @@ export class BoardController implements vscode.Disposable {
   async start(): Promise<void> {
     this.sourceSub?.dispose();
     this.source?.dispose();
+    this.cliServer?.dispose();
+    this.cliServer = undefined;
     this.source = undefined;
     this.store = undefined;
     this.problem = undefined;
 
     const root = await this.findRoot();
+    log.info(root ? `Board folder: ${root.fsPath}` : `No "${this.settings.featuresDirectory}" folder in the workspace`);
     if (!root) {
       this.problem = `No "${this.settings.featuresDirectory}" folder in this workspace. Set kanbanBananas.featuresDirectory to the folder that holds your cards.`;
       this.changed.fire();
@@ -50,6 +56,17 @@ export class BoardController implements vscode.Disposable {
     this.store = new CardStore(source);
     this.sourceSub = source.onDidChange(() => this.changed.fire());
     await source.reload();
+
+    const server = new CliServer(root.fsPath, this.store, () => this.settings, this.version);
+    try {
+      await server.start();
+      this.cliServer = server;
+      log.info(`CLI socket listening; record at ${server.recordLocation}`);
+    } catch (e) {
+      // The CLI still works without it, writing files directly.
+      server.dispose();
+      log.warn(`CLI socket not available, the CLI will write files directly: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   state(): HostMessage {
@@ -82,15 +99,16 @@ export class BoardController implements vscode.Disposable {
 
   create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<void> {
     const full = { ...intent, top: this.settings.view.addNewCardsToTop, priority: this.settings.defaultPriority };
-    return this.write((store) => store.create(full).then(() => undefined));
+    return this.write((store) => store.create(full));
   }
 
   /** Run a change; on failure, tell the user and redraw so optimistic UI snaps back. */
-  private async write(change: (store: CardStore) => Promise<void>): Promise<void> {
+  private async write(change: (store: CardStore) => Promise<unknown>): Promise<void> {
     try {
       if (!this.store) throw new Error('The board is not loaded.');
       await change(this.store);
     } catch (e) {
+      log.error(`Change failed: ${e instanceof Error ? e.message : String(e)}`);
       void vscode.window.showErrorMessage(`KanbanBananas: ${e instanceof Error ? e.message : String(e)}`);
       this.changed.fire();
     }
@@ -119,7 +137,13 @@ export class BoardController implements vscode.Disposable {
     return undefined;
   }
 
+  /** The features folder, once found. */
+  get root(): vscode.Uri | undefined {
+    return this.source?.root;
+  }
+
   dispose(): void {
+    this.cliServer?.dispose();
     this.sourceSub?.dispose();
     this.source?.dispose();
     this.changed.dispose();

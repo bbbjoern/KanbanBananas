@@ -144,7 +144,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 | **M0** | `core` + corpus tests Round trip byte-identical on all 108 cards; synthetic damaged fixtures rejected. **Done 2026-09-25.** |
 | **M1** | Read-only board | Renders your real board identically; run it for a few days. **Built 2026-09-25; trial run in progress.** |
 | **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green. **Done 2026-09-25**; see the M2 notes below. |
-| **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on |
+| **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on. **Done 2026-09-26**; see §12 implementation notes. |
 | **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green |
 | **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections |
 | **M5** | Archive, bulk moves, settings | Full parity checklist |
@@ -227,3 +227,12 @@ Run scenarios against a fixture board and assert with `kanban check` plus a diff
 - Add a note to a card that has moved to `done/`: it lands in `done/`, and no new file appears.
 - Create a card: the result is byte-identical to one the board creates.
 - Edit with an outdated `--expect-mtime`: refused, and the file is unchanged.
+
+### Implementation notes (M2b)
+- **Remote projects:** the project lives on a remote machine and is opened with VS Code Remote. The extension declares `extensionKind: ["workspace"]` so it runs on the remote, next to the files and the agents.
+- **Socket:** the socket itself is in the temp directory (socket paths are limited to ~100 characters), owner-only (`0600`). `.devtool/.kanban.sock` is a small JSON record pointing at it; the extension removes it on shutdown. A stale record just makes the CLI write directly. **Add `.devtool/.kanban.sock` to the project's `.gitignore`.**
+- **Node on the remote isn't assumed:** `scripts/kanban` runs `node` from the PATH, else the Node that the VS Code remote server ships with.
+- **Skill location:** `.claude/skills/kanban/` by default (Claude Code), set by `kanbanBananas.skillDirectory`. The command path in `SKILL.md` is filled in at install time. A `VERSION` file drives the out-of-date warning.
+- **Old skill:** installing offers to delete `.agents/skills/kanban-markdown/`, always behind a confirmation dialog.
+- **Exit codes:** 0 ok, 1 problem, 2 usage, 3 conflict, 4 refused by policy.
+- **Shared code:** atomic writes and the file-based store live in `core/node`, used by both the CLI and the extension, so there is one implementation of the write path on disk.

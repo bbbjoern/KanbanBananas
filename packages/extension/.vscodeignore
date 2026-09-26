@@ -3,4 +3,5 @@
 !dist/extension.js
 !dist/webview/index.js
 !dist/webview/index.css
+!dist/skill/**
 !media/**

@@ -2,13 +2,18 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A markdown kanban board that never corrupts your cards.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "hypertxt",
   "private": true,
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "https://github.com/bbbjoern/KanbanBananas"
+  },
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#2A2620",
+    "theme": "dark"
   },
   "engines": {
     "vscode": "^1.100.0"
@@ -68,6 +73,16 @@
         "command": "kanbanBananas.card.open",
         "title": "Open File",
         "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.installSkill",
+        "title": "Install / Update Agent Skill",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.showLog",
+        "title": "Show Log",
+        "category": "KanbanBananas"
       }
     ],
     "viewsContainers": {
@@ -75,7 +90,7 @@
         {
           "id": "kanbanBananas",
           "title": "KanbanBananas",
-          "icon": "media/board.svg"
+          "icon": "media/activitybar-icon.svg"
         }
       ]
     },
@@ -276,18 +291,38 @@
           "type": "boolean",
           "default": false,
           "description": "Show the card's filename on cards."
+        },
+        "kanbanBananas.skillDirectory": {
+          "type": "string",
+          "default": ".claude/skills",
+          "description": "Where \"Install / Update Agent Skill\" puts the kanban skill, relative to the workspace folder. Claude Code reads .claude/skills."
+        },
+        "kanbanBananas.agentsMayMoveCards": {
+          "type": "string",
+          "enum": [
+            "never",
+            "notToDone",
+            "anywhere"
+          ],
+          "default": "notToDone",
+          "enumDescriptions": [
+            "Agents never move cards between columns; you do. They can still add notes and create cards (not in Done).",
+            "Agents may move cards to any column except Done, e.g. to In Progress when starting and to Review when finished. Only you mark cards done.",
+            "Agents may move cards to any column, including Done."
+          ],
+          "markdownDescription": "How far AI agents may move cards. The installed agent skill is rewritten to match when this changes, and the `kanban` CLI enforces it (an agent can only override it with `--force` when you tell it to)."
         }
       }
     }
   },
   "scripts": {
-    "build": "npm run build -w @kanban-bananas/webview && node esbuild.mjs",
+    "build": "npm run build -w @kanban-bananas/webview && npm run build -w @kanban-bananas/cli && node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "package": "npm run build && vsce package --no-dependencies --skip-license --out kanban-bananas.vsix",
     "dev-board": "npm run build -w @kanban-bananas/core && node scripts/dev-board.mjs",
     "test:integration": "npm run build && node test/run.mjs",
-    "test": "vitest run test/unit"
+    "test": "echo \"extension: unit tests live in core; run test:integration for VS Code tests\""
   },
   "dependencies": {
     "@kanban-bananas/core": "*"
@@ -298,5 +333,8 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "@vscode/test-electron": "^3.1.0"
-  }
+  },
+  "extensionKind": [
+    "workspace"
+  ]
 }

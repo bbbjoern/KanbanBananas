@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ConflictError, readVersioned, renameNoClobber, writeAtomic } from '../../src/atomicFile.js';
+import { ConflictError, readVersioned, renameNoClobber, writeAtomic } from '../src/node/atomicFile.js';
 
 let dir: string;
 beforeEach(() => {
@@ -56,7 +56,7 @@ describe('writeAtomic', () => {
     const p = card('a.md', '---\nid: "a"\n---\n# Original');
     const bundle = join(dir, 'atomic.mjs');
     await esbuild.build({
-      entryPoints: [join(import.meta.dirname, '../../src/atomicFile.ts')],
+      entryPoints: [join(import.meta.dirname, '../src/node/atomicFile.ts')],
       bundle: true,
       platform: 'node',
       format: 'esm',
