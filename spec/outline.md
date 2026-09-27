@@ -198,7 +198,7 @@ The CLI and skill sit at M2b, right after frontmatter writes, because agents wri
 - Localisation: English only.
 - "Build with AI": not needed; dropped from parity.
 - Inline editor: CodeMirror 6 with live preview (§7).
-- Distribution: VS Code Marketplace and Open VSX, publisher `hypertxt` ("Hypertxt.org"), MIT license, first release 1.0.0 marked Preview.
+- Distribution: VS Code Marketplace and Open VSX, publisher `Hypertxtorg` ("Hypertxt.org"), MIT license, first release 1.0.0 marked Preview.
 - `id` is the filename without `.md` (all 108 corpus cards).
 
 ---

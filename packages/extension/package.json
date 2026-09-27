@@ -3,7 +3,7 @@
   "displayName": "KanbanBananas",
   "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a CLI + skill so AI agents can update cards safely.",
   "version": "1.0.0",
-  "publisher": "hypertxt",
+  "publisher": "Hypertxtorg",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=hypertxt.kanban-bananas">VS Code Marketplace</a> ·
+  <a href="https://marketplace.visualstudio.com/items?itemName=Hypertxtorg.kanban-bananas">VS Code Marketplace</a> ·
   <a href="packages/extension/CHANGELOG.md">Changelog</a> ·
   <a href="LICENSE">MIT License</a>
 </p>
@@ -43,7 +43,7 @@ It started as a replacement for an extension that corrupted cards: two parts of 
 
 ## Install
 
-- **VS Code:** install **KanbanBananas** from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=hypertxt.kanban-bananas), or from a `.vsix`: Extensions view → ⋯ → *Install from VSIX…*
+- **VS Code:** install **KanbanBananas** from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=Hypertxtorg.kanban-bananas), or from a `.vsix`: Extensions view → ⋯ → *Install from VSIX…*
 - **Cursor and other VS Code forks:** install from a `.vsix` (Open VSX listing to follow).
 
 Then put cards in `.devtool/features/` (done cards in `.devtool/features/done/`) and run **KanbanBananas: Open Board**. The [extension README](packages/extension/README.md) has the card format and settings.

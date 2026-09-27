@@ -100,7 +100,11 @@ export function attachBoard(
             .catch((e) => log.error(`Saving the column order failed: ${e instanceof Error ? e.message : String(e)}`));
           break;
         case 'openSettings':
-          void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:hypertxt.kanban-bananas');
+          // The id is publisher.name; look it up rather than hard-coding the publisher.
+          void vscode.commands.executeCommand(
+            'workbench.action.openSettings',
+            `@ext:${vscode.extensions.all.find((e) => e.packageJSON?.name === 'kanban-bananas')?.id ?? 'kanban-bananas'}`,
+          );
           break;
         case 'labelCommand':
           void vscode.commands.executeCommand(m.action === 'rename' ? 'kanbanBananas.renameLabel' : 'kanbanBananas.deleteLabel', m.label);

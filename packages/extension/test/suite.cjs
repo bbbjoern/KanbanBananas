@@ -5,7 +5,7 @@ const path = require('node:path');
 const vscode = require('vscode');
 const { execFileSync } = require('node:child_process');
 
-const EXT_ID = 'hypertxt.kanban-bananas';
+const EXT_ID = 'hypertxtorg.kanban-bananas';
 const api = () => vscode.extensions.getExtension(EXT_ID).exports;
 const store = () => api().controller.cardStore;
 const features = () => path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, '.devtool/features');
