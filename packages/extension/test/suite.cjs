@@ -269,6 +269,14 @@ const tests = {
     assert.ok(fs.statSync(path.join(dir, 'scripts/kanban')).mode & 0o100, 'launcher not executable');
     const out = execFileSync(path.join(dir, 'scripts/kanban'), ['check'], { cwd: root, encoding: 'utf8' });
     assert.match(out, /cards OK, 0 error/);
+    // Without node on the PATH, the launcher falls back to the runtime recorded at install time.
+    const noNode = execFileSync(path.join(dir, 'scripts/kanban'), ['check'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { PATH: '/usr/bin:/bin', HOME: process.env.HOME },
+    });
+    assert.match(noNode, /cards OK, 0 error/);
+    assert.ok(!fs.readFileSync(path.join(dir, 'scripts/kanban'), 'utf8').includes('vscode-server'), 'launcher still scans folders');
   },
 
   async 'the skill follows the agentsMayMoveCards setting, and the CLI enforces it'() {

@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 
 const ctx = await esbuild.context({
   entryPoints: ['src/extension.ts'],
@@ -14,12 +14,12 @@ const ctx = await esbuild.context({
   logLevel: 'info',
 });
 
-// The agent skill ships inside the extension: SKILL.md template, bundled CLI, launcher.
+// The agent skill ships inside the extension: SKILL.md template and the bundled CLI.
+// The launcher script is written at install time (see skill.ts), so the package holds no shell script.
 function copySkill() {
   mkdirSync('dist/skill', { recursive: true });
+  rmSync('dist/skill/kanban', { force: true });
   copyFileSync('../cli/skill/SKILL.md', 'dist/skill/SKILL.md');
-  copyFileSync('../cli/skill/kanban', 'dist/skill/kanban');
-  chmodSync('dist/skill/kanban', 0o755);
   copyFileSync('../cli/dist/kanban.mjs', 'dist/skill/kanban.mjs');
 }
 

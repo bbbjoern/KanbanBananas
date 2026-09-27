@@ -69,12 +69,38 @@ async function renderSkill(extensionUri: vscode.Uri, folder: vscode.WorkspaceFol
     ['SKILL.md', Buffer.from(skill)],
     [SKILL_POLICY_FILE, Buffer.from(JSON.stringify({ agentsMayMoveCards: policy, statuses } satisfies SkillPolicy, null, 2) + '\n')],
     ['scripts/kanban.mjs', await readFile(from('kanban.mjs'))],
-    [EXECUTABLE, await readFile(from('kanban'))],
+    [EXECUTABLE, Buffer.from(launcher(process.execPath))],
     ['VERSION', Buffer.from(version + '\n')],
   ]);
 }
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+
+/**
+ * The skill's launcher script, written at install time (the package ships no
+ * shell script). It runs `node` from the PATH, else the JavaScript runtime this
+ * extension itself runs on: on a remote, the Node that VS Code's server ships
+ * with; locally, VS Code's runtime in Node mode. That path changes when VS Code
+ * updates; the skill check then rewrites the launcher.
+ */
+function launcher(runtime: string): string {
+  const quoted = `'${runtime.replace(/'/g, `'\\''`)}'`;
+  return [
+    '#!/bin/sh',
+    '# Runs the KanbanBananas CLI. Written by the extension when it installs the skill.',
+    'DIR=$(cd "$(dirname "$0")" && pwd)',
+    'if command -v node >/dev/null 2>&1; then',
+    '  exec node "$DIR/kanban.mjs" "$@"',
+    'fi',
+    `RUNTIME=${quoted}`,
+    'if [ -x "$RUNTIME" ]; then',
+    '  ELECTRON_RUN_AS_NODE=1 exec "$RUNTIME" "$DIR/kanban.mjs" "$@"',
+    'fi',
+    'echo "kanban: Node.js not found. Install Node 18 or newer, or open this project in VS Code so the extension can update this launcher." >&2',
+    'exit 127',
+    '',
+  ].join('\n');
+}
 
 /**
  * Write (or overwrite) the skill folder: SKILL.md written for the current
