@@ -1,7 +1,7 @@
 {
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
-  "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a CLI + skill so AI agents can update cards safely.",
+  "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a command line so coding agents can update cards safely.",
   "version": "1.0.0",
   "publisher": "Hypertxtorg",
   "license": "MIT",
@@ -679,17 +679,6 @@
     "workspace"
   ],
   "preview": true,
-  "keywords": [
-    "kanban",
-    "markdown",
-    "board",
-    "task",
-    "project management",
-    "cards",
-    "ai",
-    "agents",
-    "claude"
-  ],
   "homepage": "https://github.com/bbbjoern/KanbanBananas#readme",
   "bugs": {
     "url": "https://github.com/bbbjoern/KanbanBananas/issues"

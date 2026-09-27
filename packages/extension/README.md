@@ -1,6 +1,6 @@
 # KanbanBananas
 
-A kanban board for the markdown cards in your repository, built so that your cards never get corrupted, and so that AI agents can work with them safely too.
+A kanban board for the markdown cards in your repository, built so that your cards never get corrupted, and so that coding agents can work with them safely too.
 
 Each card is a markdown file with a small frontmatter block (status, priority, labels, dates…). The board shows them as columns and lets you drag, edit and search them, while the files stay plain, readable and diff-friendly in git.
 
@@ -29,11 +29,11 @@ Every change goes through one write path that treats your files with care:
 
 ![Swimlanes by epic, light theme](media/screenshots/swimlanes.png)
 
-## For AI agents
+## For coding agents
 
-KanbanBananas ships a `kanban` command line and an agent skill (for Claude Code and similar agents). Agents never edit card files directly: they run `kanban find`, `note`, `move`, `set` and friends, and while VS Code is running, their changes go through the same safe path as the board, including into your open editors.
+KanbanBananas ships a `kanban` command line and an agent skill for coding agents. Agents never edit card files directly: they run `kanban find`, `note`, `move`, `set` and friends, and while VS Code is running, their changes go through the same safe path as the board, including into your open editors.
 
-Run **KanbanBananas: Install / Update Agent Skill** to add it to your project (`.claude/skills/kanban/`). The skill teaches the workflow: log the plan on the card before building, log progress as you go, and a summary when done. A setting decides how far agents may move cards (never, anything but Done, or anywhere), and the CLI enforces it.
+Run **KanbanBananas: Install / Update Agent Skill** to add it to your project . The skill teaches the workflow: log the plan on the card before building, log progress as you go, and a summary when done. A setting decides how far agents may move cards (never, anything but Done, or anywhere), and the CLI enforces it.
 
 ## Getting started
 
@@ -62,7 +62,7 @@ order: "a1"
 Queue writes while offline; replay them in order.
 ```
 
-The format is compatible with boards made by the *Kanban Markdown* extension. KanbanBananas also reads its settings (columns, compact mode) until you change them. Don't run both extensions on the same folder at the same time.
+The format is plain frontmatter plus markdown, so existing boards in this layout open as they are. Don't run two board extensions on the same folder at the same time.
 
 ## Settings
 
