@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { access, link, open, rename, stat, unlink } from 'node:fs/promises';
+import { access, link, mkdir, open, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 // Node-only: no vscode import, so this is testable (and killable) in plain Node.
@@ -94,9 +94,10 @@ export async function writeAtomic(
   return { mtimeMs: done.mtimeMs, size: done.size };
 }
 
-/** rename() that refuses to replace an existing file (spec §2.6). */
+/** rename() that refuses to replace an existing file (spec §2.6). Creates the target folder (e.g. `archived/`) if needed. */
 export async function renameNoClobber(from: string, to: string): Promise<void> {
   if (await exists(to)) throw new ConflictError(`${basename(to)} already exists.`);
+  await mkdir(dirname(to), { recursive: true });
   await rename(from, to);
   await syncDir(dirname(to));
   if (dirname(from) !== dirname(to)) await syncDir(dirname(from));

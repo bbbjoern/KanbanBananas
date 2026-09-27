@@ -44,6 +44,7 @@ Root causes found in its source:
 - **Order:** fractional-index strings in base 62 (`"a1"`, `"Zl"`, `"ZSV"`), as produced by the `fractional-indexing` package. Duplicates exist (three cards share `"Zl"`), so sort by `order`, then `created`, then `id`. Only rewrite a card's key when that card is moved.
 - **Title:** the first `# ` heading in the body. A body can be just the title with no trailing newline. **New cards** (board, commands or CLI) always end with a newline; existing cards keep whatever ending they have.
 - **Filename:** `<slug>-<YYYY-MM-DD>.md`, where the slug is lowercase `[a-z0-9-]` and at most 50 characters. Other patterns can be configured. `id` must equal the filename.
+- **Optional `lane` key (M5):** a free-text string used when the board is grouped by Lane. It's written only to cards the user puts in a lane in that grouping; other cards never get it. The CLI supports it like the other editable fields.
 - **Field usage:** `labels` is used. `assignee`, `epic` and `dueDate` are never set on this board, but must still be supported.
 - **Parser tolerance:** accept a BOM, CRLF line endings, and numeric `order: 0` (the readme shows this form).
 
@@ -70,11 +71,13 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 
 **Board**
 - [x] Configurable columns (id, name, colour); default is the five statuses above
+- [x] **Columns managed on the board (M5):** add (+ Add column / + Column), rename by clicking the title (display name only; cards keep their status), reorder by dragging the ⋮⋮ handle, recolour and delete from the right-click menu. Deleting asks where the cards go (another column or the archive); Done can't be deleted. Columns are saved to the workspace settings, and the skill and CLI get the new list. The chevron is the only thing that collapses a column.
 - [x] Drag and drop between and within columns
 - [x] Editor panel plus activity-bar sidebar view
-- [ ] Horizontal and vertical layouts; board view mode
-- [ ] Collapsible columns; epic lanes with collapsible epics and epic colours
-- [ ] Compact mode, hide-scrollbar option
+- [x] Horizontal and vertical layouts; board view mode
+- [x] Collapsible columns; epic lanes with collapsible epics and epic colours
+- [x] **Lanes, generalised (M5):** a "Group by" choice (Epic, Assignee, Priority, or Lane: a custom `lane` field). Dropping a card into a lane sets that field. For every grouping: a lane list in settings (order, colours, empty lanes), and New lane / rename / delete from the board. Rename and delete change the field on every card that has it, one store write per card, like labels.
+- [x] Compact mode, hide-scrollbar option
 - [x] Keyboard shortcuts: `N` new, `Esc` close, `Cmd/Ctrl+Enter` submit
 - [x] Follows the VS Code or Cursor theme (light and dark)
 
@@ -83,13 +86,13 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - [x] Assignee, epic, labels (up to 3 shown, then "+N more")
 - [x] Due date with relative formatting (Overdue, Today, Tomorrow, `5d`)
 - [x] Automatic `created`, `modified` and `completedAt`
-- [ ] Settings to show or hide each of: priority, assignee, due date, labels, epic, filename
+- [x] Settings to show or hide each of: priority, assignee, due date, labels, epic, filename
 - [x] Add new cards to the top or the bottom of a column
-- [ ] Filename pattern setting, plus a migration that renames existing files when the pattern changes
+- [x] Filename pattern setting, plus a migration that renames existing files when the pattern changes
 
 **Search and filters**
-- [ ] Full-text search across body, id, assignee and labels
-- [ ] Filter by priority, assignee, label, unlabelled, and due date (overdue / today / this week / none)
+- [x] Full-text search across body, id, assignee and labels
+- [x] Filter by priority, assignee, label, unlabelled, and due date (overdue / today / this week / none)
 
 **Editing**
 - [x] Split view: board on the left, inline editor on the right; saves automatically on change
@@ -98,13 +101,13 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - [x] "Open file" from a card
 
 **Bulk and management**
-- [ ] Move all cards in a column; archive all (with a confirmation dialog)
-- [ ] Rename and delete labels across all cards
-- [ ] Delete a card
+- [x] Move all cards in a column; archive all (with a confirmation dialog)
+- [x] Rename and delete labels across all cards
+- [x] Delete a card
 
 **Configuration**
-- [ ] Features directory, default priority and status
-- [ ] English only; no localisation
+- [x] Features directory, default priority and status
+- [x] English only; no localisation
 
 **Dropped from parity:** "Build with AI" (the terminal launcher for Claude Code, Codex, Copilot and OpenCode) is not needed. Agents work through the CLI and skill (§12) instead.
 
@@ -146,8 +149,8 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 | **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green. **Done 2026-09-25**; see the M2 notes below. |
 | **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on. **Done 2026-09-26**; see §12 implementation notes. |
 | **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green. **Done 2026-09-26**; see the M3 notes below. |
-| **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections |
-| **M5** | Archive, bulk moves, settings | Full parity checklist |
+| **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections. **Done 2026-09-27**. |
+| **M5** | Archive, bulk moves, generalised lanes, settings | Full parity checklist. **Done 2026-09-27**; see the M5 notes below. |
 | **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
 
 **M2 notes (known limits, all from existing data or deliberate):**
@@ -161,6 +164,20 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Native mode header is a row of CodeLens links**, not a panel: VS Code can't put UI above its text editor, and a replacement editor would be a second writer. Lenses aren't text, so they can't move the cursor; the row always has the same seven items, so its height never changes.
 - **Inline editor sync:** outside changes reach the editor as small CodeMirror transactions rebased over unsaved typing; saves carry the body they were based on and are merged three-way (line-based) with anything that changed meanwhile. Overlapping edits to the same lines raise the conflict prompt (keep mine, take theirs, show diff). 200 randomized interleavings are part of the tests.
 - **Clean-but-stale buffers:** an open card without unsaved edits is only edited through its buffer if the buffer matches the file. If VS Code hasn't reloaded an outside change yet, the file is written directly and VS Code reloads. The board also reads clean buffers from disk. (Found by the integration tests: before this, a board change could land in a stale buffer and be left unsaved.)
+
+**M4 notes:**
+- **Search runs in the extension** (it has the bodies; the board page only has excerpts): every word must appear in the id, title, body, assignee, labels or epic. Filters run in the page on fields it already has. Column counts show "shown / total" while filtering.
+- **Epic lanes** are a view toggle (panel only). Dropping a card into another lane sets its epic: a move plus a field edit, both through the store. Epic colours come from `kanbanBananas.epicColors` or a fixed palette by name.
+- **Label rename/delete** is one store write per card, in turn, each re-reading the card's current labels; renaming onto an existing label merges them.
+
+**M5 notes:**
+- **Archive** moves a card into `archived/` (created on first use); it leaves the board and keeps its status. "Restore Archived Card" moves it back to the folder its status belongs in. New cards never reuse an archived card's id.
+- **Delete** goes to the trash; on machines without one (typical for remotes) a second dialog asks before deleting permanently. Refused while the card has unsaved edits.
+- **Filename migration** lists the cards a new pattern would rename (untick to keep), then asks, since ids change with filenames. A clash gets a `-2` suffix and counts as matching afterwards.
+- **Lanes:** Group by Epic, Assignee, Priority or Lane. Configured lanes (`kanbanBananas.lanes`, workspace settings) come first and show when empty; used values follow; "none" is last. Right-click a lane to rename or delete it (changes the field on its cards); "+ New lane" adds one to settings.
+- **Skill auto-update:** the extension compares the installed skill with what it would write. Older and untouched → updated automatically (notice afterwards); edited by hand → asks ("Update Anyway"); newer (e.g. a teammate's extension) → left alone. A `.manifest.json` in the skill folder records file hashes to tell hand edits apart. `kanbanBananas.autoUpdateSkill` turns it off.
+
+**Terminology (settled 2026-09-27):** *columns* are the vertical status stages; *swimlanes* are the optional horizontal grouping by a field. Earlier notes that say "lanes" mean swimlanes.
 
 The CLI and skill sit at M2b, right after frontmatter writes, because agents write cards every session and need the safe path from the start.
 

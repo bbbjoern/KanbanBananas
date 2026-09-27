@@ -5,8 +5,10 @@ import { CardHeaderLens } from './codeLens.js';
 import { registerCardCommands } from './cardCommands.js';
 import { BoardController } from './controller.js';
 import { registerDiffProvider } from './diffView.js';
+import { registerBoardCommands } from './boardCommands.js';
+import { registerLabelCommands } from './labelCommands.js';
 import { createLog, log, reportError } from './log.js';
-import { checkSkill, installSkill, skillInstalled } from './skill.js';
+import { checkSkill, installSkill, skillInstalled, skillState, type SkillState } from './skill.js';
 
 let panel: { view: vscode.WebviewPanel; board: AttachedBoard } | undefined;
 
@@ -15,6 +17,7 @@ export interface ExtensionApi {
   ready: Promise<void>;
   state: () => HostMessage;
   controller: BoardController;
+  skillState: () => Promise<SkillState | null>;
 }
 
 export function activate(context: vscode.ExtensionContext): ExtensionApi {
@@ -50,7 +53,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       retainContextWhenHidden: true,
     });
     view.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
-    const board = attachBoard(view.webview, context.extensionUri, 'panel', controller);
+    const board = attachBoard(view.webview, context.extensionUri, 'panel', controller, context.workspaceState);
     panel = { view, board };
     view.onDidDispose(() => {
       board.dispose();
@@ -89,7 +92,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
 
     // The skill's wording and policy.json follow the setting, so rewrite it when the setting changes.
     vscode.workspace.onDidChangeConfiguration(async (e) => {
-      if (!e.affectsConfiguration('kanbanBananas.agentsMayMoveCards')) return;
+      // Also the columns: the skill lists them and the CLI accepts only those statuses.
+      if (!e.affectsConfiguration('kanbanBananas.agentsMayMoveCards') && !e.affectsConfiguration('kanbanBananas.columns')) return;
       const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
       if (!folder || !skillInstalled(folder)) return;
       try {
@@ -101,17 +105,27 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
     registerCardCommands(controller),
     registerDiffProvider(),
+    registerLabelCommands(controller),
+    registerBoardCommands(controller),
 
     vscode.window.registerWebviewViewProvider('kanbanBananas.sidebar', {
       resolveWebviewView(view) {
         view.webview.options = webviewOptions(context.extensionUri);
-        const attached = attachBoard(view.webview, context.extensionUri, 'sidebar', controller);
+        const attached = attachBoard(view.webview, context.extensionUri, 'sidebar', controller, context.workspaceState);
         view.onDidDispose(() => attached.dispose());
       },
     }),
   );
 
-  return { ready, state: () => controller.state(), controller };
+  return {
+    ready,
+    state: () => controller.state(),
+    controller,
+    skillState: async () => {
+      const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
+      return folder ? skillState(context.extensionUri, folder, version) : null;
+    },
+  };
 }
 
 export function deactivate(): void {}

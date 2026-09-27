@@ -3,6 +3,11 @@ import * as vscode from 'vscode';
 
 /** Card files are `<root>/*.md` and `<root>/done/*.md`. `archived/` is not on the board. */
 const CARD_DIRS = ['', 'done'];
+
+function isCardPath(path: string): boolean {
+  const slash = path.lastIndexOf('/');
+  return path.endsWith('.md') && CARD_DIRS.includes(slash === -1 ? '' : path.slice(0, slash));
+}
 const FILE_DEBOUNCE_MS = 150;
 const EMIT_DEBOUNCE_MS = 50;
 
@@ -79,9 +84,9 @@ export class BoardSource implements vscode.Disposable {
     this.emit();
   }
 
-  /** Re-read these files now (after the board wrote them) and redraw. */
+  /** Re-read these files now (after the board wrote them) and redraw. Paths outside the card folders (archived/) are ignored. */
   async refresh(paths: readonly string[]): Promise<void> {
-    await Promise.all(paths.map((p) => this.read(p)));
+    await Promise.all(paths.filter((p) => isCardPath(p)).map((p) => this.read(p)));
     this.emit();
   }
 

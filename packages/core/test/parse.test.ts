@@ -35,6 +35,7 @@ describe('parseCard', () => {
       completedAt: null,
       labels: ['ui', 'auth'],
       order: 'a1',
+      lane: null,
     });
     expect(card.fieldProblems).toEqual([]);
   });

@@ -33,6 +33,13 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  /* Only the board and the editor scroll, never the page: the toolbar must stay in view. */
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -80,14 +87,21 @@ button {
   height: 100vh;
 }
 
+.board-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
 .board.panel {
   display: flex;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   gap: 12px;
   align-items: flex-start;
-  height: 100vh;
-  padding: 12px;
+  padding: 4px 12px 12px;
   overflow-x: auto;
 }
 
@@ -107,6 +121,9 @@ button {
 }
 
 .board.sidebar {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -136,21 +153,15 @@ button {
   padding: 2px 4px 0 0;
 }
 
-.column-toggle {
+.column-title {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 1;
   min-width: 0;
-  padding: 8px 6px 8px 10px;
-  border-radius: var(--radius);
+  padding: 6px 6px 6px 4px;
 }
 
-.column-header .chevron {
-  width: 8px;
-  color: var(--muted);
-  font-size: 10px;
-}
 
 .column-header .dot {
   width: 7px;
@@ -327,9 +338,14 @@ button {
 .due-today { color: var(--warning); font-weight: 600; }
 .due-soon { color: var(--fg); }
 
+.epic {
+  color: var(--fg);
+}
+
 .epic::before {
   content: '◆ ';
   font-size: 9px;
+  color: var(--epic-color, var(--muted));
 }
 
 /* New card input */
@@ -376,6 +392,7 @@ button {
 
 .detail {
   flex: 0 0 min(46%, 720px);
+  transition: flex-basis 0.15s;
   min-width: 360px;
   display: flex;
   flex-direction: column;
@@ -628,4 +645,364 @@ button {
 .message.crash {
   max-width: 640px;
   line-height: 1.5;
+}
+
+/* Toolbar: search, filters, lanes, labels */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 6px;
+}
+
+.toolbar.sidebar {
+  padding: 6px 6px 2px;
+}
+
+.toolbar .search {
+  flex: 0 1 240px;
+  min-width: 120px;
+}
+
+.toolbar.sidebar .search {
+  flex: 1 1 100%;
+}
+
+.toolbar .search,
+.toolbar select {
+  padding: 4px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius);
+  background: var(--input-bg);
+  color: var(--vscode-input-foreground, var(--fg));
+  font: inherit;
+  font-size: 12px;
+  color-scheme: light dark;
+}
+
+.toolbar select {
+  max-width: 140px;
+}
+
+.toolbar select.on,
+.toolbar .search:not(:placeholder-shown) {
+  border-color: var(--accent);
+}
+
+.toolbar .search:focus,
+.toolbar select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.toolbar .tool.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--fg);
+}
+
+.toolbar .tool-select {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+/* Epic lanes */
+
+.board.lanes {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 12px 12px;
+}
+
+.lane-broken {
+  width: 272px;
+  margin-bottom: 12px;
+}
+
+.lane-header-row,
+.lane-row {
+  display: flex;
+  gap: 12px;
+  width: max-content;
+}
+
+.lane-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  /* Same offset as the lanes' coloured stripe (2px border + 10px padding), so headers line up with cells. */
+  padding: 0 0 6px 12px;
+  background: var(--bg);
+}
+
+.lane-column-head,
+.lane-cell {
+  flex: 0 0 272px;
+  width: 272px;
+}
+
+.lane-column-head.collapsed,
+.lane-cell.collapsed {
+  flex-basis: 160px;
+  width: 160px;
+}
+
+.lane {
+  margin-top: 8px;
+}
+
+.lane-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  left: 0;
+  width: max-content;
+  min-width: 240px;
+  padding: 4px 8px 4px 2px;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.lane-header.drop-target {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.lane-grip {
+  width: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: -3px;
+  text-align: center;
+  cursor: grab;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.lane-header:hover .lane-grip {
+  opacity: 1;
+}
+
+.lane-grip.placeholder {
+  cursor: default;
+}
+
+.chevron-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+.chevron-button:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.chevron-button svg {
+  transition: transform 0.12s;
+}
+
+.chevron-button svg.collapsed {
+  transform: rotate(-90deg);
+}
+
+
+
+.lane-name {
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: text;
+}
+
+.lane-name:hover {
+  background: var(--hover);
+}
+
+.lane-name-input {
+  padding: 2px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+}
+
+.lane-header .count {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.lane-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--lane-color);
+}
+
+.lane-row {
+  padding-left: 10px;
+  border-left: 2px solid var(--lane-color);
+}
+
+.lane-cell {
+  background: var(--column-bg);
+  border-radius: 8px;
+  padding-top: 8px;
+}
+
+.lane-cell-count {
+  display: block;
+  padding: 4px 10px 8px;
+  color: var(--muted);
+}
+
+/* Vertical layout: columns stacked, cards flowing in a grid */
+
+.board.panel.vertical {
+  flex-direction: column;
+  align-items: stretch;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.board.panel.vertical .column {
+  flex: none;
+  max-height: none;
+}
+
+.board.panel.vertical .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  overflow: visible;
+}
+
+/* Hidden scrollbars (still scrollable) */
+
+.no-scrollbars * {
+  scrollbar-width: none;
+}
+
+.no-scrollbars *::-webkit-scrollbar {
+  display: none;
+}
+
+.lane-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  left: 0;
+  width: max-content;
+  margin: 6px 0 2px;
+}
+
+.lane-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tool.new-lane,
+.toolbar .tool.add-lane {
+  border: 1px dashed var(--card-border-hover);
+  color: var(--fg);
+}
+
+.tool.new-lane:hover,
+.toolbar .tool.add-lane:hover {
+  border-color: var(--accent);
+}
+
+.detail.wide {
+  flex-basis: 72%;
+}
+
+.toolbar .settings {
+  font-size: 15px;
+}
+
+/* Column management: drag handle, rename, add */
+
+.column-header.drop-target {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.column-grip {
+  flex: none;
+  width: 12px;
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: -3px;
+  text-align: center;
+  cursor: grab;
+  opacity: 0.35;
+  user-select: none;
+}
+
+.column-header:hover .column-grip {
+  opacity: 1;
+}
+
+.column-name {
+  padding: 2px 4px;
+  margin-left: -4px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.column-name:hover {
+  background: var(--hover);
+}
+
+.column-name-input {
+  min-width: 0;
+  flex: 1;
+  padding: 2px 4px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  outline: none;
+}
+
+.add-column {
+  flex: 0 0 180px;
+  align-self: flex-start;
+  padding: 10px;
+  border: 1px dashed var(--card-border-hover);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.add-column:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.board.panel.vertical .add-column {
+  flex: none;
+  align-self: stretch;
 }

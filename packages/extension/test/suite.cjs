@@ -374,17 +374,193 @@ const tests = {
     assert.ok(disk(cardIn(id).path).includes('Numeric order, mine'), disk(cardIn(id).path));
     assert.notEqual(disk(cardIn(id).path), before);
   },
+
+  async 'search finds cards by body text, and labels can be renamed and deleted across cards'() {
+    const controller = api().controller;
+    assert.deepEqual(controller.search('Windows line endings'), ['crlf-with-bom-2026-09-04']);
+    assert.deepEqual(controller.search('no such words anywhere'), []);
+
+    // Two cards share a label; rename it, merging into an existing one on one card.
+    await store().setFields({ id: 'title-only-2026-09-03', changes: { labels: ['legacy', 'ui'] } });
+    await store().setFields({ id: 'numeric-order-2026-09-05', changes: { labels: ['legacy'] } });
+    const renamed = await controller.relabelAll('legacy', 'ui');
+    assert.deepEqual(renamed, { changed: 2, failed: [] });
+    assert.deepEqual(cardIn('title-only-2026-09-03').fields.labels, ['ui']);
+    assert.deepEqual(cardIn('numeric-order-2026-09-05').fields.labels, ['ui']);
+    assert.ok(!controller.labels().some((l) => l.label === 'legacy'));
+
+    const deleted = await controller.relabelAll('ui', null);
+    assert.ok(deleted.changed >= 2);
+    assert.ok(!controller.labels().some((l) => l.label === 'ui'));
+    assert.match(disk(cardIn('title-only-2026-09-03').path), /labels: \[\]/);
+  },
+
+  async 'archive takes a card off the board, restore brings it back, ids are not reused'() {
+    const controller = api().controller;
+    const id = 'title-only-2026-09-03';
+    const status = cardIn(id).fields.status;
+    await store().archive(id);
+    assert.ok(!cardIn(id), 'still on the board');
+    assert.ok(fs.existsSync(path.join(features(), 'archived', `${id}.md`)), 'not in archived/');
+    assert.deepEqual((await controller.archivedCards()).map((c) => c.id), [id]);
+    await store().restore(id);
+    assert.equal(cardIn(id)?.fields.status, status);
+    assert.deepEqual(await controller.archivedCards(), []);
+  },
+
+  async 'bulk: move a whole column, then archive it'() {
+    const controller = api().controller;
+    await store().create({ title: 'Bulk one', status: 'backlog' });
+    await store().create({ title: 'Bulk two', status: 'backlog' });
+    const backlog = controller.columnIds('backlog');
+    const moved = await controller.moveAll('backlog', 'review');
+    assert.deepEqual(moved.failed, []);
+    assert.deepEqual(controller.columnIds('backlog'), []);
+    const review = controller.columnIds('review');
+    assert.deepEqual(review.filter((id) => backlog.includes(id)), backlog, 'order not kept');
+    const archived = await controller.archiveAll('review');
+    assert.deepEqual(archived.failed, []);
+    assert.deepEqual(controller.columnIds('review'), []);
+    assert.ok((await controller.archivedCards()).length >= backlog.length);
+  },
+
+  async 'lanes: set a lane on cards, rename it across cards, configure and delete it'() {
+    const controller = api().controller;
+    const [a, b] = api().state().board.cards.map((c) => c.fields.id);
+    await kanban(['set', a, 'lane=Now']);
+    await store().setFields({ id: b, changes: { lane: 'Now' } });
+    assert.equal(cardIn(a).fields.lane, 'Now');
+    await controller.updateLanes('lane', (l) => [...l, { name: 'Now' }, { name: 'Later' }]);
+    await waitFor(() => controller.settingsNow.view.lanes.lane.length === 2);
+    assert.deepEqual(controller.settingsNow.view.lanes.lane.map((l) => l.name), ['Now', 'Later']);
+    const r = await controller.setFieldAll('lane', 'Now', 'Next');
+    assert.deepEqual(r, { changed: 2, failed: [] });
+    assert.equal(cardIn(b).fields.lane, 'Next');
+    await controller.setFieldAll('lane', 'Next', null);
+    assert.equal(cardIn(a).fields.lane, null);
+    await controller.updateLanes('lane', () => []);
+  },
+
+  async 'rename card files to a new filename pattern; ids follow'() {
+    const controller = api().controller;
+    const config = vscode.workspace.getConfiguration('kanbanBananas');
+    await config.update('filenamePattern', '{date}-{slug}', vscode.ConfigurationTarget.Workspace);
+    await waitFor(() => controller.settingsNow.filenamePattern === '{date}-{slug}');
+    const renames = controller.pendingRenames();
+    assert.ok(renames.length > 0);
+    const r = await controller.renameAll(renames);
+    assert.deepEqual(r.failed, []);
+    const state = api().state();
+    assert.deepEqual(state.board.broken, []);
+    assert.ok(state.board.cards.every((c) => /^\d{4}-\d{2}-\d{2}-/.test(c.filename)), state.board.cards.map((c) => c.filename).join(', '));
+    assert.deepEqual(controller.pendingRenames(), []);
+    await config.update('filenamePattern', undefined, vscode.ConfigurationTarget.Workspace);
+  },
+
+  async 'delete a card (to the trash)'() {
+    const controller = api().controller;
+    const created = await store().create({ title: 'Throwaway', status: 'todo' });
+    const id = created.path.replace(/\.md$/, '');
+    await controller.deleteCard(id, false);
+    assert.ok(!cardIn(id));
+    assert.ok(!fs.existsSync(path.join(features(), created.path)));
+  },
+
+  async 'skill auto-update: current, outdated, edited by hand, newer'() {
+    const dir = path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, '.claude/skills/kanban');
+    await vscode.commands.executeCommand('kanbanBananas.installSkill');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    assert.deepEqual(await api().skillState(), { kind: 'current' });
+
+    // An older install, untouched since: VERSION and manifest agree on an older version.
+    const manifestPath = path.join(dir, '.manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const sha = (t) => require('node:crypto').createHash('sha256').update(t).digest('hex');
+    fs.writeFileSync(path.join(dir, 'VERSION'), '0.1.0\n');
+    fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, version: '0.1.0', files: { ...manifest.files, VERSION: sha('0.1.0\n') } }));
+    assert.equal((await api().skillState()).kind, 'outdated');
+
+    // Someone edited SKILL.md by hand.
+    fs.appendFileSync(path.join(dir, 'SKILL.md'), '\nMy own note.\n');
+    assert.equal((await api().skillState()).kind, 'edited');
+
+    // A newer extension installed it (e.g. a teammate's).
+    fs.writeFileSync(path.join(dir, 'VERSION'), '99.0.0\n');
+    assert.equal((await api().skillState()).kind, 'newer');
+
+    await vscode.commands.executeCommand('kanbanBananas.installSkill');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    assert.deepEqual(await api().skillState(), { kind: 'current' });
+  },
+
+  async 'lane commands from the board: add, rename (typed on the board), reorder'() {
+    const controller = api().controller;
+    const names = () => controller.settingsNow.view.lanes.epic.map((l) => l.name);
+    await vscode.commands.executeCommand('kanbanBananas.lane.new', { field: 'epic', to: 'Alpha' });
+    await vscode.commands.executeCommand('kanbanBananas.lane.new', { field: 'epic', to: 'Beta' });
+    assert.ok(await waitFor(() => names().join() === 'Alpha,Beta'), names().join());
+
+    const id = api().state().board.cards[0].fields.id;
+    await store().setFields({ id, changes: { epic: 'Alpha' } });
+    await vscode.commands.executeCommand('kanbanBananas.lane.rename', { field: 'epic', value: 'Alpha', to: 'Gamma' });
+    assert.ok(await waitFor(() => names().join() === 'Gamma,Beta'), names().join());
+    assert.equal(cardIn(id).fields.epic, 'Gamma');
+
+    await vscode.commands.executeCommand('kanbanBananas.lane.moveDown', { field: 'epic', value: 'Gamma', order: ['Gamma', 'Beta'] });
+    assert.ok(await waitFor(() => names().join() === 'Beta,Gamma'), names().join());
+    await store().setFields({ id, changes: { epic: null } });
+    await controller.updateLanes('epic', () => []);
+  },
+
+  async 'columns: add, rename, reorder, delete (moving its cards); agents learn the new columns'() {
+    const controller = api().controller;
+    const ids = () => controller.settingsNow.view.columns.map((c) => c.id);
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    await vscode.commands.executeCommand('kanbanBananas.installSkill');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+    await vscode.commands.executeCommand('kanbanBananas.column.new', { to: 'Blocked' });
+    assert.ok(await waitFor(() => ids().join() === 'backlog,todo,in-progress,review,blocked,done'), ids().join());
+
+    // The skill and the CLI accept the new status.
+    const policy = () => JSON.parse(fs.readFileSync(path.join(root, '.claude/skills/kanban/policy.json'), 'utf8'));
+    assert.ok(await waitFor(() => policy().statuses?.includes('blocked')), JSON.stringify(policy()));
+    assert.match(fs.readFileSync(path.join(root, '.claude/skills/kanban/SKILL.md'), 'utf8'), /`blocked`/);
+    const card = api().state().board.cards.find((c) => c.fields.status === 'todo').fields.id;
+    const r = await kanbanResult(['move', card, 'blocked'], undefined, path.join(root, '.claude/skills/kanban/scripts/kanban'));
+    assert.equal(r.code, 0, r.err);
+    assert.ok(await waitFor(() => cardIn(card)?.fields.status === 'blocked'));
+
+    await vscode.commands.executeCommand('kanbanBananas.column.rename', { status: 'blocked', to: 'Waiting' });
+    assert.ok(await waitFor(() => controller.settingsNow.view.columns.find((c) => c.id === 'blocked')?.name === 'Waiting'));
+    assert.equal(cardIn(card).fields.status, 'blocked', 'rename must not touch cards');
+
+    await controller.updateColumns((cols) => [cols.find((c) => c.id === 'blocked'), ...cols.filter((c) => c.id !== 'blocked')]);
+    assert.ok(await waitFor(() => ids()[0] === 'blocked'), ids().join());
+
+    await vscode.commands.executeCommand('kanbanBananas.column.delete', { status: 'blocked', moveTo: 'todo' });
+    assert.ok(await waitFor(() => !ids().includes('blocked')), ids().join());
+    assert.equal(cardIn(card).fields.status, 'todo');
+    assert.deepEqual(api().state().board.broken, []);
+
+    // Done can't be deleted.
+    await vscode.commands.executeCommand('kanbanBananas.column.delete', { status: 'done', moveTo: 'todo' });
+    assert.ok(ids().includes('done'));
+    await vscode.workspace.getConfiguration('kanbanBananas').update('columns', undefined, vscode.ConfigurationTarget.Workspace);
+  },
 };
 
 /**
  * Run the bundled CLI from the workspace root with a real Node, like an agent would.
  * Asynchronously: the extension host has to keep serving the socket while the CLI waits.
  */
-function kanbanResult(args, stdin) {
+function kanbanResult(args, stdin, launcher) {
   const { spawn } = require('node:child_process');
   const cli = path.join(vscode.extensions.getExtension(EXT_ID).extensionPath, 'dist/skill/kanban.mjs');
   return new Promise((resolve) => {
-    const child = spawn('node', [cli, ...args], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath });
+    const child = launcher
+      ? spawn(launcher, args, { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath })
+      : spawn('node', [cli, ...args], { cwd: vscode.workspace.workspaceFolders[0].uri.fsPath });
     let out = '';
     let err = '';
     child.stdout.on('data', (d) => (out += d));

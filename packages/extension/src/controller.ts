@@ -1,4 +1,4 @@
-import { parseCard, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
+import { labelCounts, loadBoard, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
@@ -101,7 +101,12 @@ export class BoardController implements vscode.Disposable {
   }
 
   create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<void> {
-    const full = { ...intent, top: this.settings.view.addNewCardsToTop, priority: this.settings.defaultPriority };
+    const full = {
+      ...intent,
+      top: this.settings.view.addNewCardsToTop,
+      priority: this.settings.defaultPriority,
+      filenamePattern: this.settings.filenamePattern,
+    };
     return this.write((store) => store.create(full));
   }
 
@@ -133,6 +138,130 @@ export class BoardController implements vscode.Disposable {
     const now = this.cardBody(intent.id);
     if (!now) throw new Error('The card is gone after saving.');
     return now.body;
+  }
+
+  search(query: string): string[] {
+    const board = this.board();
+    return board ? searchCards(board, query) : [];
+  }
+
+  labels(): { label: string; count: number }[] {
+    const board = this.board();
+    return board ? labelCounts(board) : [];
+  }
+
+  /**
+   * Rename a label on every card that has it, or remove it (to = null). One
+   * store write per card, in turn; returns how many cards changed and which failed.
+   */
+  async relabelAll(from: string, to: string | null): Promise<{ changed: number; failed: string[] }> {
+    if (!this.store) throw new Error('The board is not loaded.');
+    const ids = (this.board()?.cards ?? []).filter((c) => c.card.fields.labels.includes(from)).map((c) => c.card.fields.id!);
+    let changed = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      // Re-read the card's current labels right before each write.
+      const card = this.board()?.cards.find((c) => c.card.fields.id === id);
+      if (!card) continue;
+      try {
+        await this.store.setFields({ id, changes: { labels: relabel(card.card.fields.labels, from, to) } });
+        changed++;
+      } catch (e) {
+        failed.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    log.info(`${to === null ? 'Deleted' : 'Renamed'} label "${from}"${to === null ? '' : ` to "${to}"`} on ${changed} card(s)${failed.length ? `; ${failed.length} failed` : ''}`);
+    return { changed, failed };
+  }
+
+  /** Card ids in a column, in board order. */
+  columnIds(status: string): string[] {
+    return (this.board()?.cards ?? []).filter((c) => c.card.fields.status === status).map((c) => c.card.fields.id!);
+  }
+
+  /**
+   * Run one store change per card, in turn, collecting failures instead of
+   * stopping. For bulk moves, archiving a column, and lane renames.
+   */
+  private async eachCard(ids: string[], what: string, change: (store: CardStore, id: string) => Promise<unknown>) {
+    if (!this.store) throw new Error('The board is not loaded.');
+    let changed = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await change(this.store, id);
+        changed++;
+      } catch (e) {
+        failed.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    log.info(`${what}: ${changed} card(s)${failed.length ? `, ${failed.length} failed: ${failed.join('; ')}` : ''}`);
+    return { changed, failed };
+  }
+
+  /** Move every card of a column to another, keeping their order (each goes to the end). */
+  moveAll(status: string, toStatus: string) {
+    return this.eachCard(this.columnIds(status), `Moved ${status} → ${toStatus}`, (s, id) => s.move({ id, toStatus, beforeId: null }));
+  }
+
+  archiveAll(status: string) {
+    return this.eachCard(this.columnIds(status), `Archived ${status}`, (s, id) => s.archive(id));
+  }
+
+  archive(id: string): Promise<void> {
+    return this.write((store) => store.archive(id));
+  }
+
+  async archivedCards(): Promise<{ id: string; title: string | null; status: string | null; path: string }[]> {
+    if (!this.store) return [];
+    const board = loadBoard(await this.store.archivedFiles());
+    return board.cards.map((c) => ({ id: c.card.fields.id!, title: c.card.title, status: c.card.fields.status, path: c.path }));
+  }
+
+  restore(id: string): Promise<void> {
+    return this.write((store) => store.restore(id));
+  }
+
+  async deleteCard(id: string, permanently: boolean): Promise<void> {
+    if (!this.store) throw new Error('The board is not loaded.');
+    await this.store.deleteCard(id, { permanently });
+  }
+
+  /**
+   * Change a lane value on every card that has it: `from` → `to`, or clear it
+   * (to = null). For labels use relabelAll, since a card can have several.
+   */
+  setFieldAll(field: Exclude<GroupField, never>, from: string, to: string | null) {
+    const ids = (this.board()?.cards ?? []).filter((c) => c.card.fields[field] === from).map((c) => c.card.fields.id!);
+    return this.eachCard(ids, `Set ${field} "${from}" → ${to === null ? 'none' : `"${to}"`}`, (s, id) => s.setFields({ id, changes: { [field]: to } }));
+  }
+
+  /** Change the board's columns (workspace settings; the first edit copies inherited columns into the project). */
+  async updateColumns(change: (columns: ColumnConfig[]) => ColumnConfig[]): Promise<void> {
+    const next = change(this.settings.view.columns.map((c) => ({ ...c })));
+    if (next.length === 0) throw new Error('A board needs at least one column.');
+    await vscode.workspace.getConfiguration(SECTION).update('columns', next, vscode.ConfigurationTarget.Workspace);
+    log.info(`Saved columns to workspace settings: ${next.map((c) => `${c.id} "${c.name}"`).join(', ')}`);
+  }
+
+  /** Change the configured lane list of a grouping (workspace settings). */
+  async updateLanes(field: GroupField, change: (lanes: LaneDef[]) => LaneDef[]): Promise<void> {
+    const config = vscode.workspace.getConfiguration(SECTION);
+    const current = { ...(config.get<Record<string, LaneDef[]>>('lanes') ?? {}) };
+    current[field] = change(this.settings.view.lanes[field]);
+    await config.update('lanes', current, vscode.ConfigurationTarget.Workspace);
+    log.info(`Saved ${field} lanes to workspace settings: ${current[field]!.map((l) => l.name).join(', ') || '(none)'}`);
+  }
+
+  /** Cards the current filename pattern would rename. */
+  pendingRenames(): PatternRename[] {
+    const board = this.board();
+    return board ? planRenameToPattern(board, this.settings.filenamePattern, new Date()) : [];
+  }
+
+  renameAll(renames: PatternRename[]) {
+    const byId = new Map(renames.map((r) => [r.id, r.filename]));
+    return this.eachCard([...byId.keys()], `Renamed to pattern ${this.settings.filenamePattern}`, (s, id) => s.rename(id, byId.get(id)!));
   }
 
   uriFor(path: string): vscode.Uri | undefined {

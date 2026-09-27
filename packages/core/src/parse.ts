@@ -13,6 +13,7 @@ export const KNOWN_FIELDS = [
   'completedAt',
   'labels',
   'order',
+  'lane',
 ] as const;
 
 export type KnownField = (typeof KNOWN_FIELDS)[number];
@@ -30,6 +31,8 @@ export interface CardFields {
   labels: string[];
   /** Fractional-index key. A numeric `order: 0` is read as the string "0". */
   order: string | null;
+  /** Optional free-text lane, used when the board is grouped by Lane. Absent on most cards. */
+  lane: string | null;
 }
 
 /**
@@ -190,6 +193,7 @@ function readFields(raw: Record<string, unknown>): { fields: CardFields; problem
       completedAt: str('completedAt'),
       labels,
       order,
+      lane: str('lane'),
     },
     problems: problems.sort((a, b) => KNOWN_FIELDS.indexOf(a.field) - KNOWN_FIELDS.indexOf(b.field)),
   };

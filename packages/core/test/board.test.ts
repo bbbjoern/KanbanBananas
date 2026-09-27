@@ -57,7 +57,7 @@ describe('compareCards', () => {
   const f = (order: string | null, created: string | null, id: string): CardFields => ({
     id, order, created,
     status: null, priority: null, assignee: null, epic: null, dueDate: null,
-    modified: null, completedAt: null, labels: [],
+    modified: null, completedAt: null, labels: [], lane: null,
   });
 
   it('sorts by order (base-62 code-unit order), then created, then id', () => {

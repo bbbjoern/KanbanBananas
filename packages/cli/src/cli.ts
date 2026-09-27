@@ -61,7 +61,7 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban new "<title>" [--status s] [--priority p] [--labels a,b] [--body -|text]
   kanban note <id> --heading "..." [--body -|text]   Append a section to the card
   kanban move <id> <status> [--before <id> | --after <id>]
-  kanban set <id> key=value...            priority, assignee, epic, dueDate, labels
+  kanban set <id> key=value...            priority, assignee, epic, lane, dueDate, labels
                                           labels=a,b sets; labels=+a,-b adds/removes; key= clears
   kanban edit <id> --body -|text --expect-mtime <mtime>   Replace the whole body
   kanban check                            Integrity scan; exit 1 on problems
@@ -89,6 +89,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
 
   try {
     const project = findProject(io.cwd, str(args.flags.dir) ?? io.env.KANBAN_DIR);
+    // The board's columns, as installed with the skill, unless .devtool/kanban.json sets statuses itself.
+    if (!project.config.statuses?.length && io.skillPolicy?.statuses?.length) project.statuses = io.skillPolicy.statuses;
     const ctx = new Context(project, args, io);
     switch (command) {
       case 'find':

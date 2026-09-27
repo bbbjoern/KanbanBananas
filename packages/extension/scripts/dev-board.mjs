@@ -24,6 +24,11 @@ const message = {
     columns,
     compactMode: process.argv.includes('--compact'),
     addNewCardsToTop: false,
+    epicColors: {},
+    lanes: { epic: [], assignee: [], priority: [], lane: [] },
+    layout: 'horizontal',
+    hideScrollbars: false,
+    defaultStatus: 'backlog',
     show: { priority: true, assignee: true, dueDate: true, labels: true, epic: true, filename: false },
   },
 };

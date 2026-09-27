@@ -1,4 +1,4 @@
-import { DEFAULT_COLUMNS, type ColumnConfig, type ViewSettings } from '@kanban-bananas/core';
+import { DEFAULT_COLUMNS, DEFAULT_FILENAME_PATTERN, GROUP_FIELDS, isValidFilenamePattern, type ColumnConfig, type GroupField, type LaneDef, type ViewSettings } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 
 export const SECTION = 'kanbanBananas';
@@ -8,6 +8,9 @@ const LEGACY_SECTION = 'kanban-markdown';
 export interface Settings {
   featuresDirectory: string;
   defaultPriority: string;
+  /** Column for new cards from commands and N. */
+  defaultStatus: string;
+  filenamePattern: string;
   view: ViewSettings;
 }
 
@@ -23,13 +26,21 @@ export function readSettings(): Settings {
     return config.get<T>(key)!;
   }
 
-  return {
+  const pattern = get<string>('filenamePattern');
+  const settings: Settings = {
     featuresDirectory: get<string>('featuresDirectory'),
     defaultPriority: get<string>('defaultPriority'),
+    defaultStatus: '',
+    filenamePattern: '',
     view: {
       columns: validColumns(get<unknown>('columns')),
       compactMode: get<boolean>('compactMode'),
       addNewCardsToTop: get<boolean>('addNewCardsToTop'),
+      epicColors: validColors(get<unknown>('epicColors')),
+      lanes: validLanes(get<unknown>('lanes')),
+      layout: get<string>('layout') === 'vertical' ? 'vertical' : 'horizontal',
+      hideScrollbars: get<boolean>('hideScrollbars'),
+      defaultStatus: '',
       show: {
         priority: get<boolean>('showPriority'),
         assignee: get<boolean>('showAssignee'),
@@ -40,6 +51,11 @@ export function readSettings(): Settings {
       },
     },
   };
+  const status = get<string>('defaultStatus');
+  settings.defaultStatus = settings.view.columns.some((c) => c.id === status) ? status : settings.view.columns[0]!.id;
+  settings.filenamePattern = isValidFilenamePattern(pattern) ? pattern : DEFAULT_FILENAME_PATTERN;
+  settings.view.defaultStatus = settings.defaultStatus;
+  return settings;
 }
 
 function isSet(
@@ -49,6 +65,34 @@ function isSet(
     i !== undefined &&
     (i.globalValue !== undefined || i.workspaceValue !== undefined || i.workspaceFolderValue !== undefined)
   );
+}
+
+function validLanes(value: unknown): Record<GroupField, LaneDef[]> {
+  const out = Object.fromEntries(GROUP_FIELDS.map((f) => [f, [] as LaneDef[]])) as Record<GroupField, LaneDef[]>;
+  if (!value || typeof value !== 'object') return out;
+  for (const field of GROUP_FIELDS) {
+    const list = (value as Record<string, unknown>)[field];
+    if (!Array.isArray(list)) continue;
+    const seen = new Set<string>();
+    let none = false;
+    for (const item of list) {
+      if (item?.none === true && !none) {
+        none = true;
+        out[field].push({ name: '', none: true });
+        continue;
+      }
+      const name = typeof item?.name === 'string' ? item.name.trim() : '';
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      out[field].push(typeof item.color === 'string' ? { name, color: item.color } : { name });
+    }
+  }
+  return out;
+}
+
+function validColors(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((e): e is [string, string] => typeof e[1] === 'string'));
 }
 
 function validColumns(value: unknown): ColumnConfig[] {

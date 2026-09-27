@@ -21,8 +21,11 @@ export function attachBoard(
   extensionUri: vscode.Uri,
   layout: Layout,
   controller: BoardController,
+  /** Per-project storage for the page's view choices, which VS Code drops when the page closes. */
+  memento: vscode.Memento,
 ): AttachedBoard {
-  webview.html = html(webview, extensionUri, layout);
+  const uiKey = `kanbanBananas.ui.${layout}`;
+  webview.html = html(webview, extensionUri, layout, memento.get(uiKey));
   const post = (m: HostMessage) => void webview.postMessage(m);
   const editor = new EditorSession(controller, post);
   let ready = false;
@@ -32,6 +35,7 @@ export function attachBoard(
     webview.onDidReceiveMessage((m: WebviewMessage) => {
       switch (m.type) {
         case 'ready':
+          log.info(`Board page (${layout}) loaded: build ${m.build ?? 'unknown (older than 0.5.4)'}`);
           ready = true;
           post(controller.state());
           if (pendingSelect) post({ type: 'selectCard', id: pendingSelect });
@@ -60,6 +64,46 @@ export function attachBoard(
           break;
         case 'showDiff':
           void editor.diff(m.id, m.mine);
+          break;
+        case 'search':
+          post({ type: 'searchResults', query: m.query, ids: controller.search(m.query) });
+          break;
+        case 'laneCommand':
+          log.info(`Board: lane ${m.action} (${m.field}${m.value ? ` "${m.value}"` : ''}${m.to ? ` → "${m.to}"` : ''})`);
+          void vscode.commands.executeCommand(
+            m.action === 'new' ? 'kanbanBananas.lane.new' : m.action === 'rename' ? 'kanbanBananas.lane.rename' : 'kanbanBananas.lane.delete',
+            { field: m.field, value: m.value ?? null, ...(m.to !== undefined ? { to: m.to } : {}) },
+          );
+          break;
+        case 'laneOrder':
+          log.info(`Board: lane order (${m.field}): ${m.order.map((n) => n ?? '(none)').join(', ')}`);
+          void controller
+            .updateLanes(m.field, (lanes) =>
+              m.order.map((name) => (name === null ? { name: '', none: true } : lanes.find((l) => l.name === name && !l.none) ?? { name })),
+            )
+            .catch((e) => log.error(`Saving the lane order failed: ${e instanceof Error ? e.message : String(e)}`));
+          break;
+        case 'uiState':
+          void memento.update(uiKey, m.state);
+          break;
+        case 'columnCommand':
+          log.info(`Board: column ${m.action}${m.status ? ` (${m.status})` : ''}${m.to ? ` → "${m.to}"` : ''}`);
+          void vscode.commands.executeCommand(`kanbanBananas.column.${m.action}`, {
+            ...(m.status ? { status: m.status } : {}),
+            ...(m.to !== undefined ? { to: m.to } : {}),
+          });
+          break;
+        case 'columnOrder':
+          log.info(`Board: column order: ${m.order.join(', ')}`);
+          void controller
+            .updateColumns((cols) => m.order.map((id) => cols.find((c) => c.id === id)).filter((c) => c !== undefined))
+            .catch((e) => log.error(`Saving the column order failed: ${e instanceof Error ? e.message : String(e)}`));
+          break;
+        case 'openSettings':
+          void vscode.commands.executeCommand('workbench.action.openSettings', '@ext:hypertxt.kanban-bananas');
+          break;
+        case 'labelCommand':
+          void vscode.commands.executeCommand(m.action === 'rename' ? 'kanbanBananas.renameLabel' : 'kanbanBananas.deleteLabel', m.label);
           break;
         case 'clientError':
           log.error(`Board webview (${layout}): ${m.message}${m.stack ? `\n${m.stack}` : ''}`);
@@ -153,7 +197,7 @@ class EditorSession {
   }
 }
 
-function html(webview: vscode.Webview, extensionUri: vscode.Uri, layout: Layout): string {
+function html(webview: vscode.Webview, extensionUri: vscode.Uri, layout: Layout, uiState: unknown): string {
   const asset = (name: string) => webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview', name));
   const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
   const csp = [
@@ -172,6 +216,7 @@ function html(webview: vscode.Webview, extensionUri: vscode.Uri, layout: Layout)
 </head>
 <body data-layout="${layout}">
   <div id="root"></div>
+  <script nonce="${nonce}">window.__KANBAN_UI_STATE__ = ${JSON.stringify(uiState ?? null).replace(/</g, '\\u003c')};</script>
   <script type="module" nonce="${nonce}" src="${asset('index.js')}"></script>
 </body>
 </html>`;

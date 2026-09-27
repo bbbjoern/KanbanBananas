@@ -39,11 +39,35 @@ export const DEFAULT_COLUMNS: readonly ColumnConfig[] = [
   { id: 'done', name: 'Done', color: '#22c55e' },
 ];
 
+/** Fields the board can be grouped into lanes by. `lane` is a free-text field of its own. */
+export const GROUP_FIELDS = ['epic', 'assignee', 'priority', 'lane'] as const;
+export type GroupField = (typeof GROUP_FIELDS)[number];
+
+/**
+ * A lane from settings: shown even when empty, in list order, optionally
+ * coloured. An entry with `none: true` (and an empty name) marks where the
+ * lane for cards without a value goes; without one, that lane is last.
+ */
+export interface LaneDef {
+  name: string;
+  color?: string;
+  none?: boolean;
+}
+
 export interface ViewSettings {
   columns: ColumnConfig[];
   compactMode: boolean;
   /** New cards go to the top of their column instead of the bottom. */
   addNewCardsToTop: boolean;
+  /** Colours for epic lanes and chips, by epic name. Epics not listed get a colour from a fixed palette. */
+  epicColors: Record<string, string>;
+  /** Configured lanes per grouping (order, colours, empty lanes). */
+  lanes: Record<GroupField, LaneDef[]>;
+  /** Board panel: columns side by side, or stacked. */
+  layout: 'horizontal' | 'vertical';
+  hideScrollbars: boolean;
+  /** Column for new cards from the N shortcut. */
+  defaultStatus: string;
   show: {
     priority: boolean;
     assignee: boolean;
@@ -65,6 +89,8 @@ export type HostMessage =
   /** A save overlapped someone else's change to the same lines; nothing was written. */
   | { type: 'bodyConflict'; id: string; theirs: string }
   | { type: 'bodyError'; id: string; message: string }
+  /** Card ids matching a search, in board order. */
+  | { type: 'searchResults'; query: string; ids: string[] }
   /** Open this card in the split view (from "Show on Board"). */
   | { type: 'selectCard'; id: string }
   /** The card went away (deleted, broken, renamed): close the editor. */
@@ -72,17 +98,34 @@ export type HostMessage =
 
 /** Messages from the board webview to the extension host: intents, never whole cards (spec §2.1). */
 export type WebviewMessage =
-  | { type: 'ready' }
+  /** The page loaded; `build` identifies its bundle (extension version + build time). */
+  | { type: 'ready'; build?: string }
   | { type: 'openCard'; path: string }
   | { type: 'move'; id: string; toStatus: string; beforeId: string | null }
   | { type: 'create'; title: string; status: string }
-  | { type: 'setFields'; id: string; changes: Partial<Record<'priority' | 'assignee' | 'epic' | 'dueDate' | 'labels', string | string[] | null>> }
+  | { type: 'setFields'; id: string; changes: Partial<Record<'priority' | 'assignee' | 'epic' | 'dueDate' | 'labels' | 'lane', string | string[] | null>> }
   | { type: 'openEditor'; id: string }
   | { type: 'closeEditor' }
   /** Body edited from `base` in the inline editor (\n line endings). */
   | { type: 'saveBody'; id: string; base: string; body: string }
   /** Show the editor's text next to the card file. */
   | { type: 'showDiff'; id: string; mine: string }
+  /** Full-text search over the cards (the host has the bodies). */
+  | { type: 'search'; query: string }
+  /** Add, rename or delete a lane of the current grouping. `to` is a new name typed on the board (else the host asks). */
+  | { type: 'laneCommand'; action: 'new' | 'rename' | 'delete'; field: GroupField; value?: string | null; to?: string }
+  /** Lanes were dragged into a new order; null is the lane for cards without a value. */
+  | { type: 'laneOrder'; field: GroupField; order: (string | null)[] }
+  /** Add, rename, recolour or delete a column. `to` is a new name typed on the board (else the host asks). */
+  | { type: 'columnCommand'; action: 'new' | 'rename' | 'delete' | 'color'; status?: string; to?: string }
+  /** Columns were dragged into a new order (their ids). */
+  | { type: 'columnOrder'; order: string[] }
+  /** Open VS Code's Settings at this extension's settings. */
+  | { type: 'openSettings' }
+  /** View choices (lanes, wide editor, collapsed columns, filters…) to keep across sessions. Opaque to the host. */
+  | { type: 'uiState'; state: unknown }
+  /** Rename or delete a label across all cards; the host asks for details and confirmation. */
+  | { type: 'labelCommand'; action: 'rename' | 'delete'; label?: string }
   /** Something in the webview threw; the host logs it. */
   | { type: 'clientError'; message: string; stack?: string }
   /** The split view rendered this card (for tests). */

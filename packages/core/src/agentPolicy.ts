@@ -14,6 +14,8 @@ export const SKILL_POLICY_FILE = 'policy.json';
 
 export interface SkillPolicy {
   agentsMayMoveCards: AgentMovePolicy;
+  /** The board's column ids, in order, so the CLI accepts the project's own columns. */
+  statuses?: string[];
 }
 
 export function isAgentMovePolicy(v: unknown): v is AgentMovePolicy {

@@ -1,5 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readdir, readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import type { BoardFile } from '../board.js';
 import { editCard } from '../edit.js';
 import { idForFilename } from '../filenames.js';
@@ -9,6 +9,7 @@ import { ConflictError, exists, readVersioned, renameNoClobber, writeAtomic } fr
 
 /** Card files are `<root>/*.md` and `<root>/done/*.md`. `archived/` is not on the board. */
 export const CARD_DIRS = ['', 'done'];
+export const ARCHIVE_DIRS = ['archived'];
 const MAX_ATTEMPTS = 3;
 
 export interface WriteResult {
@@ -23,9 +24,9 @@ export interface WriteResult {
 // Keep a BOM if there is one, so text matches the bytes on disk.
 const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
-export async function readBoardDir(root: string): Promise<BoardFile[]> {
+export async function readBoardDir(root: string, dirs: readonly string[] = CARD_DIRS): Promise<BoardFile[]> {
   const files: BoardFile[] = [];
-  for (const dir of CARD_DIRS) {
+  for (const dir of dirs) {
     let names: string[];
     try {
       names = (await readdir(join(root, dir), { withFileTypes: true }))
@@ -55,12 +56,21 @@ export async function freeName(root: string, dir: string, filename: string, know
   }
 }
 
-/** Resolve a plan's target path, adding an id change to `changes` if the name needed a suffix. */
+/**
+ * Resolve a plan's target path (another folder and/or a new name), adding an
+ * id change to `changes` whenever the filename changes, including a suffix
+ * for a clash. Nothing is ever overwritten.
+ */
 export async function resolveTarget(root: string, plan: Plan, known: ReadonlySet<string>): Promise<Plan & { targetPath?: string }> {
-  if (plan.toDir === undefined) return plan;
-  const filename = plan.path.slice(plan.path.lastIndexOf('/') + 1);
-  const free = await freeName(root, plan.toDir, filename, known);
-  const targetPath = plan.toDir ? `${plan.toDir}/${free}` : free;
+  if (plan.toDir === undefined && plan.rename === undefined) return plan;
+  const slash = plan.path.lastIndexOf('/');
+  const dir = plan.toDir ?? (slash === -1 ? '' : plan.path.slice(0, slash));
+  const filename = plan.path.slice(slash + 1);
+  const wanted = plan.rename ?? filename;
+  const samePlace = dir === (slash === -1 ? '' : plan.path.slice(0, slash)) && wanted === filename;
+  if (samePlace) return plan;
+  const free = await freeName(root, dir, wanted, known);
+  const targetPath = dir ? `${dir}/${free}` : free;
   const changes = free === filename ? plan.changes : { ...plan.changes, id: idForFilename(free) };
   return { ...plan, changes, targetPath };
 }
@@ -97,6 +107,7 @@ export async function applyPlanToFile(root: string, id: string, plan: Plan & { t
 
 /** Write a new card; never replaces an existing file (ConflictError if the name is taken). */
 export async function createCardFile(root: string, card: NewCard): Promise<WriteResult> {
+  await mkdir(dirname(join(root, card.path)), { recursive: true });
   const version = await writeAtomic(join(root, card.path), card.text, null);
   return { path: card.path, mtimeMs: version.mtimeMs, route: 'disk' };
 }

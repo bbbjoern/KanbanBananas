@@ -10,3 +10,4 @@ export * from './edit.js';
 export * from './cliProtocol.js';
 export * from './agentPolicy.js';
 export * from './merge.js';
+export * from './search.js';

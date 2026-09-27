@@ -1,6 +1,10 @@
 import {
   editCard,
+  loadBoard,
   patchFields,
+  planArchive,
+  planRename,
+  planRestore,
   planCreate,
   planEditBody,
   planMove,
@@ -18,9 +22,11 @@ import {
 } from '@kanban-bananas/core';
 import {
   applyPlanToFile,
+  ARCHIVE_DIRS,
   cardEdit,
   ConflictError,
   createCardFile,
+  readBoardDir,
   resolveTarget,
   type WriteResult,
 } from '@kanban-bananas/core/node';
@@ -63,9 +69,50 @@ export class CardStore {
     return this.enqueue(() => this.apply(intent.id, (board) => planSaveBody(board, intent, new Date())));
   }
 
+  /** Move a card into `archived/` (off the board). */
+  archive(id: string): Promise<WriteResult> {
+    return this.enqueue(() => this.apply(id, (board) => planArchive(board, id, new Date())));
+  }
+
+  /** Rename a card's file (to a new filename pattern); its id follows. */
+  rename(id: string, filename: string): Promise<WriteResult> {
+    return this.enqueue(() => this.apply(id, (board) => planRename(board, id, filename, new Date())));
+  }
+
+  /** Bring an archived card back to the column its status names. */
+  restore(id: string): Promise<WriteResult> {
+    return this.enqueue(async () => {
+      const archive = loadBoard(await this.archivedFiles());
+      return this.applyResolved(id, planRestore(archive, id, new Date()));
+    });
+  }
+
+  /** Cards in `archived/`, for the restore picker. */
+  async archivedFiles() {
+    return readBoardDir(this.source.root.fsPath, ARCHIVE_DIRS);
+  }
+
+  /**
+   * Delete a card's file: to the trash when the machine has one, otherwise
+   * for good (`permanently`, which the caller confirms first). Refused while
+   * the card has unsaved edits in an editor.
+   */
+  deleteCard(id: string, { permanently = false }: { permanently?: boolean } = {}): Promise<void> {
+    return this.enqueue(async () => {
+      const card = this.source.board().cards.find((c) => c.card.fields.id === id);
+      if (!card) throw new ConflictError(`No card "${id}" on the board.`);
+      if (this.source.document(card.path)?.isDirty) {
+        throw new ConflictError(`${card.path} has unsaved edits in an editor. Save or close it first.`);
+      }
+      await vscode.workspace.fs.delete(this.source.uriFor(card.path), { useTrash: !permanently });
+      await this.source.refresh([card.path]);
+    });
+  }
+
   create(intent: CreateIntent): Promise<WriteResult> {
     return this.enqueue(async () => {
-      const taken = new Set(this.source.paths());
+      // Never reuse an id that an archived card still has.
+      const taken = new Set([...this.source.paths(), ...(await this.archivedFiles()).map((f) => f.path.replace(/^archived\//, ''))]);
       for (let attempt = 1; ; attempt++) {
         const card = planCreate(this.source.board(), intent, new Date(), taken);
         try {
@@ -91,7 +138,11 @@ export class CardStore {
   }
 
   private async apply(id: string, makePlan: (board: Board) => Plan): Promise<WriteResult> {
-    const plan = await resolveTarget(this.source.root.fsPath, makePlan(this.source.board()), new Set(this.source.paths()));
+    return this.applyResolved(id, makePlan(this.source.board()));
+  }
+
+  private async applyResolved(id: string, planned: Plan): Promise<WriteResult> {
+    const plan = await resolveTarget(this.source.root.fsPath, planned, new Set(this.source.paths()));
     const doc = await this.editableBuffer(plan.path);
     const result = doc
       ? await this.applyToBuffer(doc, id, plan)

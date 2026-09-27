@@ -15,7 +15,9 @@ function readSkillPolicy(): SkillPolicy | undefined {
   try {
     const path = join(dirname(fileURLToPath(import.meta.url)), '..', SKILL_POLICY_FILE);
     const policy = JSON.parse(readFileSync(path, 'utf8')) as Partial<SkillPolicy>;
-    return isAgentMovePolicy(policy.agentsMayMoveCards) ? { agentsMayMoveCards: policy.agentsMayMoveCards } : undefined;
+    if (!isAgentMovePolicy(policy.agentsMayMoveCards)) return undefined;
+    const statuses = Array.isArray(policy.statuses) && policy.statuses.every((s) => typeof s === 'string') ? policy.statuses : undefined;
+    return { agentsMayMoveCards: policy.agentsMayMoveCards, ...(statuses?.length ? { statuses } : {}) };
   } catch {
     return undefined;
   }

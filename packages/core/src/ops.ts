@@ -1,6 +1,6 @@
 import { generateKeyBetween } from 'fractional-indexing';
 import type { Board, BoardCard } from './board.js';
-import { cardFilename, idForFilename } from './filenames.js';
+import { cardFilename, DEFAULT_FILENAME_PATTERN, idForFilename } from './filenames.js';
 import { compareCards } from './order.js';
 import { noteSection } from './edit.js';
 import type { FieldValue } from './patch.js';
@@ -20,7 +20,7 @@ export interface MoveIntent {
 }
 
 /** Fields a user may edit directly. `status`, `order` and timestamps are managed by moves. */
-export const EDITABLE_FIELDS = ['priority', 'assignee', 'epic', 'dueDate', 'labels'] as const;
+export const EDITABLE_FIELDS = ['priority', 'assignee', 'epic', 'dueDate', 'labels', 'lane'] as const;
 export type EditableField = (typeof EDITABLE_FIELDS)[number];
 
 export interface SetFieldsIntent {
@@ -37,14 +37,21 @@ export interface CreateIntent {
   top?: boolean;
   /** Body text after the title. */
   body?: string;
+  /** Filename pattern, e.g. `{slug}-{date}` (the default). */
+  filenamePattern?: string;
 }
+
+/** Where archived cards live, next to `done/`. They're not on the board. */
+export const ARCHIVE_DIR = 'archived';
 
 export interface Plan {
   /** Current path of the card, relative to the features directory. */
   path: string;
   changes: Record<string, FieldValue>;
-  /** Directory the card must end up in, when it has to move (into or out of `done/`). */
+  /** Directory the card must end up in, when it has to move (into or out of `done/` or `archived/`). */
   toDir?: string;
+  /** New filename (a rename to the filename pattern). The id follows it. */
+  rename?: string;
   /** Text to add at the end of the body. */
   append?: string;
   /** Replacement for the whole body. */
@@ -133,6 +140,50 @@ export function planSetFields(board: Board, intent: SetFieldsIntent, now: Date):
   return { path: card.path, changes };
 }
 
+/** Move a card into `archived/`. Its status and everything else stay as they are. */
+export function planArchive(board: Board, id: string, now: Date): Plan {
+  const card = findCard(board, id);
+  return { path: card.path, changes: { modified: now.toISOString() }, toDir: ARCHIVE_DIR };
+}
+
+/** Bring an archived card back to the folder its status belongs in. `archive` is a board of the archived cards. */
+export function planRestore(archive: Board, id: string, now: Date): Plan {
+  const card = findCard(archive, id);
+  return { path: card.path, changes: { modified: now.toISOString() }, toDir: dirForStatus(card.card.fields.status ?? '') };
+}
+
+export interface PatternRename {
+  id: string;
+  path: string;
+  /** Filename the pattern asks for (before any suffix for a clash). */
+  filename: string;
+}
+
+/**
+ * Cards whose filename doesn't match the pattern, and what it should be. The
+ * slug comes from the title, the date from `created` (else the date in the
+ * current filename, else today). Renaming changes the card's id.
+ */
+export function planRenameToPattern(board: Board, pattern: string, now: Date): PatternRename[] {
+  const out: PatternRename[] = [];
+  for (const c of board.cards) {
+    const created = c.card.fields.created ? new Date(c.card.fields.created) : null;
+    const fromName = /(\d{4}-\d{2}-\d{2})/.exec(c.filename)?.[1];
+    const date = created && !Number.isNaN(created.getTime()) ? created : fromName ? new Date(`${fromName}T12:00:00Z`) : now;
+    const filename = cardFilename(c.card.title ?? idForFilename(c.filename), date, pattern);
+    // A `-2`, `-3`… suffix from a name clash still counts as matching.
+    const stem = filename.replace(/\.md$/, '');
+    const matches = c.filename === filename || new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-\\d+\\.md$`).test(c.filename);
+    if (!matches) out.push({ id: c.card.fields.id!, path: c.path, filename });
+  }
+  return out;
+}
+
+export function planRename(board: Board, id: string, filename: string, now: Date): Plan {
+  const card = findCard(board, id);
+  return { path: card.path, changes: { modified: now.toISOString() }, rename: filename };
+}
+
 export function planNote(board: Board, intent: NoteIntent, now: Date): Plan {
   const card = findCard(board, intent.id);
   return { path: card.path, changes: { modified: now.toISOString() }, append: noteSection(intent.heading, intent.body) };
@@ -176,7 +227,7 @@ export function planCreate(board: Board, intent: CreateIntent, now: Date, taken:
 
   const dir = dirForStatus(intent.status);
   const ids = new Set([...taken].map((p) => idForFilename(p.slice(p.lastIndexOf('/') + 1))));
-  const base = idForFilename(cardFilename(title, now));
+  const base = idForFilename(cardFilename(title, now, intent.filenamePattern ?? DEFAULT_FILENAME_PATTERN));
   let id = base;
   for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
 

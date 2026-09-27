@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A markdown kanban board that never corrupts your cards.",
-  "version": "0.3.1",
+  "version": "0.6.0",
   "publisher": "hypertxt",
   "private": true,
   "license": "UNLICENSED",
@@ -88,6 +88,91 @@
         "command": "kanbanBananas.card.showOnBoard",
         "title": "Show on Board",
         "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.renameLabel",
+        "title": "Rename Label\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.deleteLabel",
+        "title": "Delete Label\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.archive",
+        "title": "Archive",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.delete",
+        "title": "Delete Card\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.moveAll",
+        "title": "Move All Cards to\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.archiveAll",
+        "title": "Archive All Cards\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.lane.new",
+        "title": "New Swimlane\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.lane.rename",
+        "title": "Rename Swimlane\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.lane.delete",
+        "title": "Delete Swimlane\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.restoreArchived",
+        "title": "Restore Archived Card\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.renameFilesToPattern",
+        "title": "Rename Card Files to Pattern\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.lane.moveUp",
+        "title": "Move Swimlane Up",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.lane.moveDown",
+        "title": "Move Swimlane Down",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.new",
+        "title": "New Column\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.rename",
+        "title": "Rename Column\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.color",
+        "title": "Change Column Colour\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.column.delete",
+        "title": "Delete Column\u2026",
+        "category": "KanbanBananas"
       }
     ],
     "viewsContainers": {
@@ -156,6 +241,61 @@
           "command": "kanbanBananas.card.open",
           "when": "webviewSection == 'card'",
           "group": "1_open@1"
+        },
+        {
+          "command": "kanbanBananas.card.archive",
+          "when": "webviewSection == 'card'",
+          "group": "4_manage@1"
+        },
+        {
+          "command": "kanbanBananas.card.delete",
+          "when": "webviewSection == 'card'",
+          "group": "4_manage@2"
+        },
+        {
+          "command": "kanbanBananas.column.moveAll",
+          "when": "webviewSection == 'column'",
+          "group": "1_bulk@1"
+        },
+        {
+          "command": "kanbanBananas.column.archiveAll",
+          "when": "webviewSection == 'column'",
+          "group": "1_bulk@2"
+        },
+        {
+          "command": "kanbanBananas.lane.rename",
+          "when": "webviewSection == 'lane'",
+          "group": "1_lane@1"
+        },
+        {
+          "command": "kanbanBananas.lane.delete",
+          "when": "webviewSection == 'lane'",
+          "group": "1_lane@2"
+        },
+        {
+          "command": "kanbanBananas.lane.moveUp",
+          "when": "webviewSection == 'lane' || webviewSection == 'laneNone'",
+          "group": "0_order@1"
+        },
+        {
+          "command": "kanbanBananas.lane.moveDown",
+          "when": "webviewSection == 'lane' || webviewSection == 'laneNone'",
+          "group": "0_order@2"
+        },
+        {
+          "command": "kanbanBananas.column.rename",
+          "when": "webviewSection == 'column'",
+          "group": "0_column@1"
+        },
+        {
+          "command": "kanbanBananas.column.color",
+          "when": "webviewSection == 'column'",
+          "group": "0_column@2"
+        },
+        {
+          "command": "kanbanBananas.column.delete",
+          "when": "webviewSection == 'column'",
+          "group": "2_delete@1"
         }
       ],
       "commandPalette": [
@@ -189,6 +329,50 @@
         },
         {
           "command": "kanbanBananas.card.showOnBoard",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.archive",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.delete",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.column.moveAll",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.column.archiveAll",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.lane.rename",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.lane.delete",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.lane.moveUp",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.lane.moveDown",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.column.rename",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.column.color",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.column.delete",
           "when": "false"
         }
       ]
@@ -325,6 +509,140 @@
           "type": "boolean",
           "default": true,
           "description": "Show a row of card fields (status, priority, labels\u2026) above a card opened in VS Code's editor."
+        },
+        "kanbanBananas.epicColors": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "markdownDescription": "Colours for epics, e.g. `{ \"Media\": \"#8b5cf6\" }`. Epics not listed get a colour from a fixed palette."
+        },
+        "kanbanBananas.lanes": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Lanes per grouping, shown in this order and even when empty, e.g. `{ \"epic\": [{ \"name\": \"Compose\", \"color\": \"#8b5cf6\" }], \"lane\": [{ \"name\": \"Now\" }, { \"name\": \"Next\" }] }`. Values used on cards but not listed get lanes after these. The board's \"New lane\" adds entries here.",
+          "properties": {
+            "epic": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "none": {
+                    "type": "boolean",
+                    "description": "Marks the position of the lane for cards without a value."
+                  }
+                }
+              }
+            },
+            "assignee": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "none": {
+                    "type": "boolean",
+                    "description": "Marks the position of the lane for cards without a value."
+                  }
+                }
+              }
+            },
+            "priority": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "none": {
+                    "type": "boolean",
+                    "description": "Marks the position of the lane for cards without a value."
+                  }
+                }
+              }
+            },
+            "lane": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  },
+                  "none": {
+                    "type": "boolean",
+                    "description": "Marks the position of the lane for cards without a value."
+                  }
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "kanbanBananas.layout": {
+          "type": "string",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal",
+          "enumDescriptions": [
+            "Columns side by side.",
+            "Columns stacked, one below the other."
+          ],
+          "description": "Layout of the board panel. The sidebar is always stacked."
+        },
+        "kanbanBananas.hideScrollbars": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hide scrollbars on the board (it still scrolls)."
+        },
+        "kanbanBananas.filenamePattern": {
+          "type": "string",
+          "default": "{slug}-{date}",
+          "pattern": "^[A-Za-z0-9_{}-]*\\{slug\\}[A-Za-z0-9_{}-]*$",
+          "markdownDescription": "Filename for new cards. `{slug}` (required) is the title in lowercase-with-dashes, `{date}` is YYYY-MM-DD. To rename existing cards to a new pattern, run **KanbanBananas: Rename Card Files to Pattern**."
+        },
+        "kanbanBananas.defaultStatus": {
+          "type": "string",
+          "default": "",
+          "description": "Column for new cards from the N shortcut and new-card commands. Empty: the first column."
+        },
+        "kanbanBananas.autoUpdateSkill": {
+          "type": "boolean",
+          "default": true,
+          "description": "Update the installed agent skill automatically when a newer extension version brings a newer one. Never replaces a newer skill or one that was edited by hand."
         }
       }
     }

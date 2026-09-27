@@ -20,8 +20,19 @@ export function slugify(title: string): string {
   return slug.slice(0, MAX_SLUG_LENGTH).replace(/-+$/, '');
 }
 
-/** Default filename pattern: `<slug>-<YYYY-MM-DD>.md`. */
-export function cardFilename(title: string, date: Date): string {
+/**
+ * Filename patterns: `{slug}` is required, `{date}` is YYYY-MM-DD. The
+ * default is the old board's `{slug}-{date}` (spec §3).
+ */
+export const DEFAULT_FILENAME_PATTERN = '{slug}-{date}';
+
+export function isValidFilenamePattern(pattern: string): boolean {
+  return pattern.includes('{slug}') && /^[a-z0-9{}_-]+$/i.test(pattern) && !/\{(?!slug\}|date\})/.test(pattern);
+}
+
+/** A card's filename from its title and date, e.g. `fix-login-2026-09-01.md`. */
+export function cardFilename(title: string, date: Date, pattern: string = DEFAULT_FILENAME_PATTERN): string {
   const slug = slugify(title) || 'card';
-  return `${slug}-${date.toISOString().slice(0, 10)}.md`;
+  const p = isValidFilenamePattern(pattern) ? pattern : DEFAULT_FILENAME_PATTERN;
+  return `${p.replaceAll('{slug}', slug).replaceAll('{date}', date.toISOString().slice(0, 10))}.md`;
 }

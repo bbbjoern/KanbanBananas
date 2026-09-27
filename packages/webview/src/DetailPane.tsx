@@ -16,6 +16,9 @@ export function DetailPane(props: {
   settings: ViewSettings;
   live: boolean;
   onToggleLive: () => void;
+  /** Wider editor (more room for text, less for the board). */
+  wide: boolean;
+  onToggleWide: () => void;
   onClose: () => void;
 }) {
   const { card, settings } = props;
@@ -26,7 +29,7 @@ export function DetailPane(props: {
   }, [id]);
 
   return (
-    <aside className="detail" aria-label={`Card: ${card.title ?? card.filename}`}>
+    <aside className={`detail ${props.wide ? 'wide' : ''}`} aria-label={`Card: ${card.title ?? card.filename}`}>
       <header className="detail-header">
         <div className="detail-title">
           <span className="title">{card.title ?? card.filename}</span>
@@ -38,6 +41,16 @@ export function DetailPane(props: {
           </button>
           <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openCard', path: card.path })}>
             Open file
+          </button>
+          <button
+            type="button"
+            className="tool icon"
+            onClick={props.onToggleWide}
+            aria-pressed={props.wide}
+            aria-label={props.wide ? 'Narrower editor' : 'Wider editor'}
+            title={props.wide ? 'Narrower editor' : 'Wider editor'}
+          >
+            {props.wide ? '⇥' : '⇤'}
           </button>
           <button type="button" className="tool icon" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
             ×
@@ -76,6 +89,9 @@ export function DetailPane(props: {
         </label>
         <TextField label="Assignee" value={card.fields.assignee} onCommit={(v) => set({ assignee: v || null })} />
         <TextField label="Epic" value={card.fields.epic} onCommit={(v) => set({ epic: v || null })} />
+        {((settings.lanes?.lane.length ?? 0) > 0 || card.fields.lane) && (
+          <TextField label="Lane" value={card.fields.lane} onCommit={(v) => set({ lane: v || null })} />
+        )}
         <TextField
           label="Labels"
           wide

@@ -34,20 +34,41 @@ Run it as:
 | `new "<title>" [--status s] [--priority p] [--labels a,b] [--body -]` | Create a card; id, order and timestamps are filled in |
 | `note <id> --heading "..." [--body -]` | Append a `## heading` section to the end of the card |
 | `move <id> <status> [--before <id> \| --after <id>]` | Change status (moves into or out of `done/` as needed) |
-| `set <id> key=value...` | `priority`, `assignee`, `epic`, `dueDate` (YYYY-MM-DD), `labels`. `labels=a,b` sets, `labels=+a,-b` adds/removes, `key=` clears |
+| `set <id> key=value...` | `priority`, `assignee`, `epic`, `lane`, `dueDate` (YYYY-MM-DD), `labels`. `labels=a,b` sets, `labels=+a,-b` adds/removes, `key=` clears |
 | `edit <id> --body - --expect-mtime <mtime>` | Replace the whole body (everything after the frontmatter); refused if the card changed since `show` |
 | `check` | Integrity scan of the whole board; non-zero exit on problems |
 
 `--body -` reads the text from stdin; use a heredoc for multi-line text. Every change prints the card's final path and new mtime.
-Statuses: `backlog`, `todo`, `in-progress`, `review`, `done` (unless the project configures others).
+Statuses (the board's columns, in order): {{STATUSES}}.
 
 ## Recipes
+
+The card is the task's record: the plan goes on it before building, progress while building, and a summary when done. Someone (you, after an interruption, or another agent) should be able to pick up the work from the card alone.
 
 **Start work on a card**
 
 {{START_WORK}}
 
-**Record completed work** (the main thing to do at the end of a task)
+**Log the plan before building.** Once the plan is agreed, and before changing code, put the complete plan on the card:
+
+```sh
+{{KANBAN}} note <id> --heading "Plan — <short summary>" --body - <<'PLAN'
+Goal, the steps, which files change, decisions made and why, open questions.
+PLAN
+```
+
+**Log progress while building.** After each meaningful step (a part working, tests passing, a commit, a decision, a blocker), add a short entry, ending with what comes next:
+
+```sh
+{{KANBAN}} note <id> --heading "Progress — <what happened>" --body - <<'NOTE'
+What was done, anything that changed from the plan and why.
+Next: <the next step>.
+NOTE
+```
+
+Keep entries short. Write them as you go rather than at the end: sessions can end without warning.
+
+**Record completed work** (at the end of a task)
 
 ```sh
 {{KANBAN}} note <id> --heading "Done — <short summary>" --body - <<'NOTE'
@@ -56,6 +77,13 @@ NOTE
 ```
 
 {{AFTER_NOTE}}
+
+**Pick up work after a break**
+
+```sh
+{{KANBAN}} ls --status in-progress
+{{KANBAN}} show <id>        # read the Plan and the latest Progress entry, then continue from its "Next"
+```
 
 **Create a card from a bug report**
 
