@@ -117,7 +117,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Restore card from git** (`HEAD` version) as a repair action.
 - **Conflict prompt** when a card changes on disk while it's open in the inline editor: offer keep mine, take theirs, or diff.
 - **"Not in git" marker** on cards git doesn't track yet, since git is the only real backup.
-- **Pre-commit hook** running `kanban check`.
+- **Pre-commit hook** running `kanban check` (M6): "Install Pre-commit Hook" adds a marked block to `.git/hooks/pre-commit` (honours `core.hooksPath`, extends an existing hook after asking). It runs only when staged changes touch the cards.
 - **Agent writes** go through the same store as the board and are covered by the same guarantees (§12).
 
 ## 7. Decision: the inline editor
@@ -151,7 +151,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 | **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green. **Done 2026-09-26**; see the M3 notes below. |
 | **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections. **Done 2026-09-27**. |
 | **M5** | Archive, bulk moves, generalised lanes, settings | Full parity checklist. **Done 2026-09-27**; see the M5 notes below. |
-| **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
+| **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus. **Done 2026-09-27** (108 cards OK); publishing steps in PUBLISHING.md. |
 
 **M2 notes (known limits, all from existing data or deliberate):**
 - **Duplicate order keys:** a card dropped between two cards that share a key (three cards share `"Zl"`) lands after the last of them. Neighbours are never re-keyed (§3).
@@ -193,12 +193,12 @@ The CLI and skill sit at M2b, right after frontmatter writes, because agents wri
 
 ## 11. Open questions
 
-- Private VSIX, or publish to the Marketplace / Open VSX? (Needed by M6.)
 
 **Resolved**
 - Localisation: English only.
 - "Build with AI": not needed; dropped from parity.
 - Inline editor: CodeMirror 6 with live preview (§7).
+- Distribution: VS Code Marketplace and Open VSX, publisher `hypertxt` ("Hypertxt.org"), MIT license, first release 1.0.0 marked Preview.
 - `id` is the filename without `.md` (all 108 corpus cards).
 
 ---

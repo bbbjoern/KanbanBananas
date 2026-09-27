@@ -26,7 +26,7 @@ interface SkillPaths {
   command: string;
 }
 
-function skillPaths(folder: vscode.WorkspaceFolder): SkillPaths {
+export function skillPaths(folder: vscode.WorkspaceFolder): SkillPaths {
   const base = vscode.workspace.getConfiguration(SECTION).get<string>('skillDirectory') || '.claude/skills';
   const rel = `${base.replace(/\/+$/, '')}/${SKILL_NAME}`;
   return { folder, dir: join(folder.uri.fsPath, ...rel.split('/')), command: `${rel}/scripts/kanban` };

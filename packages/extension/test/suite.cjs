@@ -548,6 +548,35 @@ const tests = {
     assert.ok(ids().includes('done'));
     await vscode.workspace.getConfiguration('kanbanBananas').update('columns', undefined, vscode.ConfigurationTarget.Workspace);
   },
+
+  async 'pre-commit hook blocks a commit with a broken card, and allows it once fixed'() {
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const git = (...args) => require('node:child_process').spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    git('init', '-q');
+    git('config', 'user.email', 'test@example.com');
+    git('config', 'user.name', 'Test');
+    git('add', '-A');
+    assert.equal(git('commit', '-q', '-m', 'cards').status, 0, 'baseline commit failed');
+
+    await vscode.commands.executeCommand('kanbanBananas.installPreCommitHook');
+    const hook = fs.readFileSync(path.join(root, '.git/hooks/pre-commit'), 'utf8');
+    assert.match(hook, /# >>> kanban-bananas >>>/);
+    // Running it again updates the block instead of adding a second one.
+    await vscode.commands.executeCommand('kanbanBananas.installPreCommitHook');
+    assert.equal(fs.readFileSync(path.join(root, '.git/hooks/pre-commit'), 'utf8').split('>>> kanban-bananas >>>').length, 2);
+
+    const bad = path.join(features(), 'broken-2026-09-27.md');
+    fs.writeFileSync(bad, '# no frontmatter\n');
+    git('add', '-A');
+    const blocked = git('commit', '-q', '-m', 'broken card');
+    assert.notEqual(blocked.status, 0, 'commit with a broken card went through');
+    assert.match(blocked.stdout + blocked.stderr, /broken-2026-09-27\.md/);
+
+    fs.unlinkSync(bad);
+    git('add', '-A');
+    const ok = git('commit', '-q', '-m', 'fixed', '--allow-empty');
+    assert.equal(ok.status, 0, ok.stderr);
+  },
 };
 
 /**

@@ -7,6 +7,7 @@ import { BoardController } from './controller.js';
 import { registerDiffProvider } from './diffView.js';
 import { registerBoardCommands } from './boardCommands.js';
 import { registerLabelCommands } from './labelCommands.js';
+import { installPreCommitHook } from './preCommit.js';
 import { createLog, log, reportError } from './log.js';
 import { checkSkill, installSkill, skillInstalled, skillState, type SkillState } from './skill.js';
 
@@ -89,6 +90,21 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
 
     vscode.commands.registerCommand('kanbanBananas.showLog', () => log.show()),
+
+    vscode.commands.registerCommand('kanbanBananas.installPreCommitHook', async () => {
+      const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
+      if (!folder || !controller.root) {
+        reportError('Install Pre-commit Hook', new Error('no board folder found in this workspace'));
+        return;
+      }
+      try {
+        // The hook runs the skill's CLI, so make sure the skill is there and current.
+        if (!skillInstalled(folder)) await installSkill(context.extensionUri, folder, version, { quiet: true });
+        await installPreCommitHook(folder, controller.root);
+      } catch (e) {
+        reportError('Installing the pre-commit hook failed', e);
+      }
+    }),
 
     // The skill's wording and policy.json follow the setting, so rewrite it when the setting changes.
     vscode.workspace.onDidChangeConfiguration(async (e) => {

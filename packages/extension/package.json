@@ -1,14 +1,14 @@
 {
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
-  "description": "A markdown kanban board that never corrupts your cards.",
-  "version": "0.6.0",
+  "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a CLI + skill so AI agents can update cards safely.",
+  "version": "1.0.0",
   "publisher": "hypertxt",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bbbjoern/KanbanBananas"
+    "url": "https://github.com/bbbjoern/KanbanBananas",
+    "directory": "packages/extension"
   },
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -19,7 +19,8 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
@@ -172,6 +173,11 @@
       {
         "command": "kanbanBananas.column.delete",
         "title": "Delete Column\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.installPreCommitHook",
+        "title": "Install Pre-commit Hook (kanban check)",
         "category": "KanbanBananas"
       }
     ],
@@ -651,10 +657,12 @@
     "build": "npm run build -w @kanban-bananas/webview && npm run build -w @kanban-bananas/cli && node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "package": "npm run build && vsce package --no-dependencies --skip-license --out kanban-bananas.vsix",
+    "package": "npm run build && vsce package --no-dependencies --out kanban-bananas.vsix --baseImagesUrl https://github.com/bbbjoern/KanbanBananas/raw/HEAD/packages/extension",
     "dev-board": "npm run build -w @kanban-bananas/core && node scripts/dev-board.mjs",
     "test:integration": "npm run build && node test/run.mjs",
-    "test": "echo \"extension: unit tests live in core; run test:integration for VS Code tests\""
+    "test": "echo \"extension: unit tests live in core; run test:integration for VS Code tests\"",
+    "publish:marketplace": "vsce publish --no-dependencies --packagePath kanban-bananas.vsix",
+    "publish:openvsx": "ovsx publish kanban-bananas.vsix"
   },
   "dependencies": {
     "@kanban-bananas/core": "*"
@@ -664,9 +672,26 @@
     "@types/vscode": "^1.100.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
-    "@vscode/test-electron": "^3.1.0"
+    "@vscode/test-electron": "^3.1.0",
+    "ovsx": "^1.2.0"
   },
   "extensionKind": [
     "workspace"
-  ]
+  ],
+  "preview": true,
+  "keywords": [
+    "kanban",
+    "markdown",
+    "board",
+    "task",
+    "project management",
+    "cards",
+    "ai",
+    "agents",
+    "claude"
+  ],
+  "homepage": "https://github.com/bbbjoern/KanbanBananas#readme",
+  "bugs": {
+    "url": "https://github.com/bbbjoern/KanbanBananas/issues"
+  }
 }
