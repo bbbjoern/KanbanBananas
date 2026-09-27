@@ -15,9 +15,11 @@ const files = ['', 'done'].flatMap((dir) => {
   return names.map((n) => ({ path: dir ? `${dir}/${n}` : n, text: readFileSync(join(root, dir, n), 'utf8') }));
 });
 const columns = [...DEFAULT_COLUMNS];
+const board = loadBoard(files, { statuses: columns.map((c) => c.id) });
 const message = {
   type: 'state',
-  board: toBoardView(loadBoard(files, { statuses: columns.map((c) => c.id) })),
+  board: toBoardView(board),
+  bodies: Object.fromEntries(board.cards.map((c) => [c.card.fields.id, c.card.source.body.replace(/\r\n/g, '\n')])),
   settings: {
     columns,
     compactMode: process.argv.includes('--compact'),

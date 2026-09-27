@@ -5,6 +5,7 @@ import {
   planEditBody,
   planMove,
   planNote,
+  planSaveBody,
   planSetFields,
   type Board,
   type CreateIntent,
@@ -12,6 +13,7 @@ import {
   type MoveIntent,
   type NoteIntent,
   type Plan,
+  type SaveBodyIntent,
   type SetFieldsIntent,
 } from '@kanban-bananas/core';
 import {
@@ -22,7 +24,7 @@ import {
   resolveTarget,
   type WriteResult,
 } from '@kanban-bananas/core/node';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import * as vscode from 'vscode';
 import type { BoardSource } from './boardSource.js';
 
@@ -56,6 +58,11 @@ export class CardStore {
     return this.enqueue(() => this.apply(intent.id, (board) => planEditBody(board, intent, new Date())));
   }
 
+  /** Save the inline editor's body, merged with any change made since it was loaded. */
+  saveBody(intent: SaveBodyIntent): Promise<WriteResult> {
+    return this.enqueue(() => this.apply(intent.id, (board) => planSaveBody(board, intent, new Date())));
+  }
+
   create(intent: CreateIntent): Promise<WriteResult> {
     return this.enqueue(async () => {
       const taken = new Set(this.source.paths());
@@ -85,12 +92,25 @@ export class CardStore {
 
   private async apply(id: string, makePlan: (board: Board) => Plan): Promise<WriteResult> {
     const plan = await resolveTarget(this.source.root.fsPath, makePlan(this.source.board()), new Set(this.source.paths()));
-    const doc = this.source.document(plan.path);
+    const doc = await this.editableBuffer(plan.path);
     const result = doc
       ? await this.applyToBuffer(doc, id, plan)
       : await applyPlanToFile(this.source.root.fsPath, id, plan);
     await this.source.refresh(plan.targetPath ? [plan.path, plan.targetPath] : [plan.path]);
     return result;
+  }
+
+  /**
+   * The open editor buffer to change, if any. A buffer with unsaved edits is
+   * always used, to protect them. A buffer without them is used only if it
+   * matches the file: when VS Code hasn't caught up with an outside change
+   * yet, the file is the truth, so it's written directly and VS Code reloads.
+   */
+  private async editableBuffer(path: string): Promise<vscode.TextDocument | undefined> {
+    const doc = this.source.document(path);
+    if (!doc || doc.isDirty) return doc;
+    const onDisk = await readFile(doc.uri.fsPath, 'utf8').catch(() => null);
+    return onDisk === doc.getText() ? doc : undefined;
   }
 
   /**
@@ -120,7 +140,7 @@ export class CardStore {
     if (fm.start !== fm.end || fm.text) {
       edit.replace(doc.uri, new vscode.Range(doc.positionAt(fm.start), doc.positionAt(fm.end)), fm.text);
     }
-    if (plan.append !== undefined || plan.body !== undefined) {
+    if (plan.append !== undefined || plan.body !== undefined || plan.rebase !== undefined) {
       // Everything after the frontmatter edit is body; replace only the part that differs.
       const tail = minimalReplace(current.slice(fm.end), next.slice(fm.start + fm.text.length));
       const offset = fm.end;
@@ -141,12 +161,19 @@ export class CardStore {
       throw new Error(`Edit to ${plan.targetPath ?? plan.path} did not produce the expected text. Check the file.`);
     }
     if (!wasDirty && !(await after.save())) {
-      throw new Error(`Could not save ${plan.targetPath ?? plan.path}.`);
+      // The file changed on disk in the moment since the check. Put the buffer
+      // back as it was (no unsaved edits of ours left behind) and report it.
+      if (!target) {
+        const undo = new vscode.WorkspaceEdit();
+        undo.replace(after.uri, new vscode.Range(after.positionAt(0), after.positionAt(after.getText().length)), current);
+        await vscode.workspace.applyEdit(undo);
+      }
+      throw new ConflictError(`${plan.targetPath ?? plan.path} changed on disk while it was being saved. Nothing was written; try again.`);
     }
     return {
       path: plan.targetPath ?? plan.path,
       mtimeMs: (await stat(after.uri.fsPath)).mtimeMs,
-      ...(wasDirty ? { unsaved: true } : {}),
+      route: wasDirty ? 'editor-unsaved' : 'editor-saved',
     };
   }
 }

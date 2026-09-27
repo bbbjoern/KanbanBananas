@@ -111,6 +111,20 @@ describe('writing (no VS Code running)', () => {
     expect(read('title-only-2026-09-03.md')).toMatch(/order: "Zl"\n---\n# Title only\n\nNow with text.\n$/);
   });
 
+  it('every write reports its route, in text and JSON', async () => {
+    const text = await kanban(['set', 'title-only-2026-09-03', 'priority=low']);
+    expect(text.stdout).toContain('route: disk (written by the CLI)');
+    const created = JSON.parse((await kanban(['new', 'Routed', '--json'])).stdout);
+    expect(created).toMatchObject({ route: 'disk', handledBy: 'cli' });
+  });
+
+  it('a new card ends with a newline, with or without a body', async () => {
+    const plain = JSON.parse((await kanban(['new', 'Plain', '--json'])).stdout).path;
+    const withBody = JSON.parse((await kanban(['new', 'Bodied', '--body', 'Text', '--json'])).stdout).path;
+    expect(read(plain.replace('.devtool/features/', '')).endsWith('---\n# Plain\n')).toBe(true);
+    expect(read(withBody.replace('.devtool/features/', '')).endsWith('# Bodied\n\nText\n')).toBe(true);
+  });
+
   it('set patches fields, with relative labels', async () => {
     await kanban(['set', 'crlf-with-bom-2026-09-04', 'priority=high', 'labels=+ui,-bug', 'assignee=sam', 'epic=']);
     const text = read('crlf-with-bom-2026-09-04.md');
@@ -175,6 +189,6 @@ describe('writing (no VS Code running)', () => {
     writeFileSync(join(project, '.devtool/.kanban.sock'), JSON.stringify({ socket: join(project, 'gone.sock'), pid: 1, version: 'x' }));
     const r = await kanban(['set', 'title-only-2026-09-03', 'priority=low', '--json']);
     expect(r.code).toBe(EXIT.ok);
-    expect(JSON.parse(r.stdout).via).toBe('file');
+    expect(JSON.parse(r.stdout)).toMatchObject({ handledBy: 'cli', route: 'disk', unsaved: false });
   });
 });

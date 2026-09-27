@@ -51,6 +51,19 @@ export interface Plan {
   body?: string;
   /** Refuse unless the file's mtime is exactly this (the version the caller read). */
   expectMtimeMs?: number;
+  /** An editor's body edited from `base`; merged with any change made since (see CardEdit.rebase). */
+  rebase?: { base: string; mine: string };
+}
+
+export interface SaveBodyIntent {
+  id: string;
+  base: string;
+  body: string;
+}
+
+export function planSaveBody(board: Board, intent: SaveBodyIntent, now: Date): Plan {
+  const card = findCard(board, intent.id);
+  return { path: card.path, changes: { modified: now.toISOString() }, rebase: { base: intent.base, mine: intent.body } };
 }
 
 export interface NoteIntent {
@@ -151,8 +164,9 @@ export interface NewCard {
 }
 
 /**
- * A new card in the exact format the old board wrote: every known key in a
- * fixed order, double-quoted strings, then `# Title` with no trailing newline.
+ * A new card in the format the old board wrote (every known key in a fixed
+ * order, double-quoted strings, then `# Title`), always ending with a newline
+ * whoever creates it: the board, a command or the CLI.
  * `taken` holds every existing path; the filename gets a `-2`, `-3`… suffix
  * rather than reuse an id.
  */
@@ -188,7 +202,7 @@ export function planCreate(board: Board, intent: CreateIntent, now: Date, taken:
     `# ${title}`,
   ].join('\n');
   const body = intent.body?.replace(/\s+$/, '');
-  const full = body ? `${text}\n\n${body}\n` : text;
+  const full = body ? `${text}\n\n${body}\n` : `${text}\n`;
 
   return { path: dir ? `${dir}/${id}.md` : `${id}.md`, id, text: full };
 }

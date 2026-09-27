@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { BoardView, BrokenView, CardView, ColumnConfig, ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { findColumn, moveCard, moveIntent, type Columns } from './columns.js';
+import { DetailPane } from './DetailPane.js';
 import { formatDue } from './dates.js';
 import { onHostMessage, vscode } from './vscode.js';
 
@@ -26,15 +27,23 @@ const COLUMN_PREFIX = 'column:';
 
 interface UiState {
   collapsed: string[];
+  /** Inline editor in live preview (true) or plain markdown. */
+  live?: boolean;
+  /** Card open in the split view. */
+  selected?: string | null;
 }
 
 export function App({ layout }: { layout: Layout }) {
   const [board, setBoard] = useState<BoardView | null>(null);
   const [settings, setSettings] = useState<ViewSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<string[]>(
-    () => (vscode.getState() as UiState | undefined)?.collapsed ?? [],
-  );
+  const saved = vscode.getState() as UiState | undefined;
+  const [collapsed, setCollapsed] = useState<string[]>(saved?.collapsed ?? []);
+  const [live, setLive] = useState(saved?.live ?? true);
+  const [selected, setSelected] = useState<string | null>(saved?.selected ?? null);
+  useEffect(() => {
+    vscode.setState({ collapsed, live, selected } satisfies UiState);
+  }, [collapsed, live, selected]);
   /** Column being given a new card, if any. */
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -44,9 +53,12 @@ export function App({ layout }: { layout: Layout }) {
         setBoard(m.board);
         setSettings(m.settings);
         setError(null);
-      } else {
+      } else if (m.type === 'error') {
         setError(m.message);
+      } else if (m.type === 'selectCard') {
+        setSelected(m.id);
       }
+      // Editor messages are handled by the inline editor itself.
     });
     vscode.postMessage({ type: 'ready' });
     return off;
@@ -68,9 +80,7 @@ export function App({ layout }: { layout: Layout }) {
   }, [settings]);
 
   const toggle = (id: string) => {
-    const next = collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id];
-    setCollapsed(next);
-    vscode.setState({ collapsed: next } satisfies UiState);
+    setCollapsed(collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id]);
   };
 
   const cardsById = useMemo(() => new Map((board?.cards ?? []).map((c) => [c.fields.id!, c])), [board]);
@@ -83,7 +93,9 @@ export function App({ layout }: { layout: Layout }) {
 
   // Working copy while dragging; replaced whenever the host sends a new board.
   const [columns, setColumns] = useState<Columns>(hostColumns);
-  useEffect(() => setColumns(hostColumns), [hostColumns]);
+  useEffect(() => {
+    setColumns(hostColumns);
+  }, [hostColumns]);
   const dragStart = useRef<Columns | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -135,6 +147,10 @@ export function App({ layout }: { layout: Layout }) {
   if (!board || !settings) return <div className="message">Loading board…</div>;
 
   const active = activeId ? cardsById.get(activeId) : undefined;
+  const selectedCard = layout === 'panel' && selected ? cardsById.get(selected) : undefined;
+  // Panel: a click opens the split view. Sidebar (narrow): a click opens the file in VS Code's editor.
+  const onOpen = (card: CardView) =>
+    layout === 'panel' ? setSelected(card.fields.id!) : vscode.postMessage({ type: 'openCard', path: card.path });
 
   return (
     <DndContext
@@ -148,6 +164,7 @@ export function App({ layout }: { layout: Layout }) {
         setColumns(hostColumns);
       }}
     >
+      <div className={`workspace ${selectedCard ? 'split' : ''}`}>
       <div className={`board ${layout} ${settings.compactMode ? 'compact' : ''}`}>
         {board.broken.length > 0 && (
           <BrokenLane broken={board.broken} collapsed={collapsed.includes('#broken')} onToggle={() => toggle('#broken')} />
@@ -163,10 +180,22 @@ export function App({ layout }: { layout: Layout }) {
             adding={adding === col.id}
             onAdd={() => setAdding(col.id)}
             onAddDone={() => setAdding(null)}
+            selected={selectedCard?.fields.id ?? null}
+            onOpen={onOpen}
           />
         ))}
       </div>
-      <DragOverlay>{active && <CardBody card={active} settings={settings} dragging />}</DragOverlay>
+      {selectedCard && (
+        <DetailPane
+          card={selectedCard}
+          settings={settings}
+          live={live}
+          onToggleLive={() => setLive(!live)}
+          onClose={() => setSelected(null)}
+        />
+      )}
+      </div>
+      <DragOverlay>{active && <CardBody card={active} settings={settings} dragging onOpen={() => {}} />}</DragOverlay>
     </DndContext>
   );
 }
@@ -180,6 +209,8 @@ function Column(props: {
   adding: boolean;
   onAdd: () => void;
   onAddDone: () => void;
+  selected: string | null;
+  onOpen: (card: CardView) => void;
 }) {
   const { column, cards, collapsed, settings } = props;
   const { setNodeRef } = useDroppable({ id: COLUMN_PREFIX + column.id });
@@ -198,7 +229,13 @@ function Column(props: {
           <div className="cards" ref={setNodeRef}>
             {settings.addNewCardsToTop && form}
             {cards.map((card) => (
-              <SortableCard key={card.fields.id} card={card} settings={settings} />
+              <SortableCard
+                key={card.fields.id}
+                card={card}
+                settings={settings}
+                selected={card.fields.id === props.selected}
+                onOpen={props.onOpen}
+              />
             ))}
             {!settings.addNewCardsToTop && form}
           </div>
@@ -263,7 +300,8 @@ function NewCardForm({ status, onDone }: { status: string; onDone: () => void })
   );
 }
 
-function SortableCard({ card, settings }: { card: CardView; settings: ViewSettings }) {
+function SortableCard(props: { card: CardView; settings: ViewSettings; selected: boolean; onOpen: (card: CardView) => void }) {
+  const { card, settings } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.fields.id! });
   return (
     <div
@@ -273,12 +311,19 @@ function SortableCard({ card, settings }: { card: CardView; settings: ViewSettin
       {...attributes}
       {...listeners}
     >
-      <CardBody card={card} settings={settings} />
+      <CardBody card={card} settings={settings} selected={props.selected} onOpen={props.onOpen} />
     </div>
   );
 }
 
-function CardBody({ card, settings, dragging }: { card: CardView; settings: ViewSettings; dragging?: boolean }) {
+function CardBody(props: {
+  card: CardView;
+  settings: ViewSettings;
+  dragging?: boolean;
+  selected?: boolean;
+  onOpen: (card: CardView) => void;
+}) {
+  const { card, settings, dragging } = props;
   const { fields } = card;
   const show = settings.show;
   const due = show.dueDate && fields.dueDate ? formatDue(fields.dueDate, new Date()) : null;
@@ -290,11 +335,12 @@ function CardBody({ card, settings, dragging }: { card: CardView; settings: View
   return (
     <button
       type="button"
-      className={`card ${dragging ? 'dragging' : ''}`}
+      className={`card ${dragging ? 'dragging' : ''} ${props.selected ? 'selected' : ''}`}
+      aria-pressed={props.selected}
       title={card.path}
       // Right-click menu: VS Code reads this and shows the kanbanBananas.card.* commands.
       data-vscode-context={JSON.stringify({ webviewSection: 'card', cardId: fields.id, preventDefaultContextMenuItems: true })}
-      onClick={() => vscode.postMessage({ type: 'openCard', path: card.path })}
+      onClick={() => props.onOpen(card)}
     >
       <div className="title-row">
         <span className="title">{card.title ?? card.filename}</span>

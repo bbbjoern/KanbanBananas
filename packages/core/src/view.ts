@@ -57,14 +57,36 @@ export interface ViewSettings {
 /** Messages from the extension host to the board webview. */
 export type HostMessage =
   | { type: 'state'; board: BoardView; settings: ViewSettings }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  /** The inline editor's card: its body when opened, and again whenever someone else changes it. */
+  | { type: 'editorBody'; id: string; path: string; body: string }
+  /** A save from the inline editor was written; `body` is what the card holds now. */
+  | { type: 'bodySaved'; id: string; body: string }
+  /** A save overlapped someone else's change to the same lines; nothing was written. */
+  | { type: 'bodyConflict'; id: string; theirs: string }
+  | { type: 'bodyError'; id: string; message: string }
+  /** Open this card in the split view (from "Show on Board"). */
+  | { type: 'selectCard'; id: string }
+  /** The card went away (deleted, broken, renamed): close the editor. */
+  | { type: 'editorClosed'; id: string; reason: string };
 
 /** Messages from the board webview to the extension host: intents, never whole cards (spec §2.1). */
 export type WebviewMessage =
   | { type: 'ready' }
   | { type: 'openCard'; path: string }
   | { type: 'move'; id: string; toStatus: string; beforeId: string | null }
-  | { type: 'create'; title: string; status: string };
+  | { type: 'create'; title: string; status: string }
+  | { type: 'setFields'; id: string; changes: Partial<Record<'priority' | 'assignee' | 'epic' | 'dueDate' | 'labels', string | string[] | null>> }
+  | { type: 'openEditor'; id: string }
+  | { type: 'closeEditor' }
+  /** Body edited from `base` in the inline editor (\n line endings). */
+  | { type: 'saveBody'; id: string; base: string; body: string }
+  /** Show the editor's text next to the card file. */
+  | { type: 'showDiff'; id: string; mine: string }
+  /** Something in the webview threw; the host logs it. */
+  | { type: 'clientError'; message: string; stack?: string }
+  /** The split view rendered this card (for tests). */
+  | { type: 'editorShown'; id: string };
 
 const EXCERPT_LENGTH = 160;
 

@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A markdown kanban board that never corrupts your cards.",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "publisher": "hypertxt",
   "private": true,
   "license": "UNLICENSED",
@@ -82,6 +82,11 @@
       {
         "command": "kanbanBananas.showLog",
         "title": "Show Log",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.showOnBoard",
+        "title": "Show on Board",
         "category": "KanbanBananas"
       }
     ],
@@ -180,6 +185,10 @@
         },
         {
           "command": "kanbanBananas.card.open",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.showOnBoard",
           "when": "false"
         }
       ]
@@ -311,6 +320,11 @@
             "Agents may move cards to any column, including Done."
           ],
           "markdownDescription": "How far AI agents may move cards. The installed agent skill is rewritten to match when this changes, and the `kanban` CLI enforces it (an agent can only override it with `--force` when you tell it to)."
+        },
+        "kanbanBananas.showHeaderInEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a row of card fields (status, priority, labels\u2026) above a card opened in VS Code's editor."
         }
       }
     }

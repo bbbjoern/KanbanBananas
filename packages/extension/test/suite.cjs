@@ -42,6 +42,18 @@ const tests = {
     assert.deepEqual(state.board.broken, []);
   },
 
+  async 'split view: opening a card in the board renders without errors'() {
+    const controller = api().controller;
+    const id = cardIn('add-login-page-2026-09-01') ? 'add-login-page-2026-09-01' : api().state().board.cards[0].fields.id;
+    await vscode.commands.executeCommand('kanbanBananas.card.showOnBoard', { cardId: id });
+    const shown = await waitFor(() => controller.shownInEditor.includes(id) || controller.clientErrors.length > 0, 10000);
+    assert.deepEqual(controller.clientErrors, [], 'webview errors');
+    assert.ok(shown && controller.shownInEditor.includes(id), 'split view never rendered the card');
+    // Give the editor a moment to load the body, then check again.
+    await new Promise((r) => setTimeout(r, 1000));
+    assert.deepEqual(controller.clientErrors, [], 'webview errors after loading the body');
+  },
+
   async 'opens the board panel'() {
     await vscode.commands.executeCommand('kanbanBananas.openBoard');
     const board = await waitFor(() =>
@@ -171,7 +183,7 @@ const tests = {
     assert.match(b, /-2\.md$/);
     const text = disk(a);
     assert.match(text, /^---\nid: "fresh-idea-\d{4}-\d{2}-\d{2}"\nstatus: "todo"\npriority: "medium"\nassignee: null\n/);
-    assert.ok(text.endsWith('---\n# Fresh idea'));
+    assert.ok(text.endsWith('---\n# Fresh idea\n'));
   },
 
   async 'concurrent writers to one card: no update is lost'() {
@@ -214,7 +226,8 @@ const tests = {
 
     const out = await kanban(['note', id, '--heading', 'Done — from an agent', '--body', '-', '--json'], 'Agent text.\n');
     const result = JSON.parse(out);
-    assert.equal(result.via, 'vscode');
+    assert.equal(result.handledBy, 'vscode');
+    assert.equal(result.route, 'editor-unsaved');
     assert.equal(result.unsaved, true);
 
     const text = doc.getText();
@@ -227,7 +240,9 @@ const tests = {
 
   async 'CLI: move through the extension renames into done/'() {
     const out = JSON.parse(await kanban(['move', 'add-login-page-2026-09-01', 'done', '--json']));
-    assert.equal(out.via, 'vscode');
+    assert.equal(out.handledBy, 'vscode');
+    // The card may still be loaded (clean) in VS Code from the previous test; either way it's saved.
+    assert.ok(['disk', 'editor-saved'].includes(out.route), out.route);
     assert.ok(out.path.endsWith('done/add-login-page-2026-09-01.md'));
     assert.match(disk('done/add-login-page-2026-09-01.md'), /status: "done"/);
   },
@@ -285,6 +300,80 @@ const tests = {
     await config.update('agentsMayMoveCards', undefined, vscode.ConfigurationTarget.Workspace);
     assert.ok(await waitFor(() => fs.readFileSync(path.join(dir, 'policy.json'), 'utf8').includes('"notToDone"')));
   },
+
+  async 'native editor: cursor stays put while the board, an agent and a save change the card'() {
+    const id = 'crlf-with-bom-2026-09-04';
+    const rel = cardIn(id).path;
+    const doc = await vscode.workspace.openTextDocument(uri(rel));
+    const editor = await vscode.window.showTextDocument(doc);
+    // Put the cursor in the middle of the title line and type.
+    const at = doc.getText().indexOf('with BOM');
+    editor.selection = new vscode.Selection(doc.positionAt(at), doc.positionAt(at));
+    await vscode.commands.executeCommand('type', { text: 'typed ' });
+    const around = () => {
+      const off = doc.offsetAt(editor.selection.active);
+      const t = doc.getText();
+      return t.slice(off - 12, off) + '|' + t.slice(off, off + 8);
+    };
+    const expected = around();
+    assert.ok(expected.endsWith('CRLF typed |with BOM'), `after typing: ${JSON.stringify(expected)}`);
+
+    await store().setFields({ id, changes: { priority: 'low', labels: ['a', 'b', 'c'] } });
+    assert.equal(around(), expected, `moved after a board field edit: ${JSON.stringify(around())}`);
+    await kanban(['note', id, '--heading', 'Agent note', '--body', 'From the CLI.']);
+    assert.equal(around(), expected, `moved after an agent note: ${JSON.stringify(around())}`);
+    await store().move({ id, toStatus: 'in-progress', beforeId: null });
+    assert.equal(around(), expected, `moved after a board move: ${JSON.stringify(around())}`);
+    await doc.save();
+    assert.equal(around(), expected, `moved after saving: ${JSON.stringify(around())}`);
+
+    // Keystrokes after all that still land where the cursor is.
+    await vscode.commands.executeCommand('type', { text: 'more ' });
+    assert.ok(doc.getText().includes('CRLF typed more with BOM'), 'typing went elsewhere');
+    assert.ok(doc.getText().includes('## Agent note'), 'agent note missing');
+    await doc.save();
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  },
+
+  async 'native editor: the CodeLens header is one fixed row of card fields'() {
+    const id = 'crlf-with-bom-2026-09-04';
+    const target = uri(cardIn(id).path);
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(target));
+    const lenses = await vscode.commands.executeCommand('vscode.executeCodeLensProvider', target);
+    const titles = lenses.map((l) => l.command?.title ?? '');
+    assert.equal(titles.length, 7, titles.join(' | '));
+    assert.ok(lenses.every((l) => l.range.start.line === 0), 'lenses not all on the first line');
+    assert.ok(titles.includes('Priority: Low'), titles.join(' | '));
+    assert.ok(titles.includes('Labels: a, b, c'), titles.join(' | '));
+    assert.ok(titles.includes('Due: none'));
+    // Not on files outside the board.
+    const other = vscode.Uri.file(path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, 'README.md'));
+    fs.writeFileSync(other.fsPath, '# Not a card\n');
+    await vscode.workspace.openTextDocument(other);
+    assert.equal((await vscode.commands.executeCommand('vscode.executeCodeLensProvider', other)).length, 0);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+  },
+
+  async 'inline editor saves merge with outside changes, and report real conflicts'() {
+    const id = 'numeric-order-2026-09-05';
+    const controller = api().controller;
+    const base = controller.cardBody(id).body;
+    await kanban(['note', id, '--heading', 'Agent was here']);
+    // Save based on the version before the note: merged, nothing lost.
+    const merged = await controller.saveBody({ id, base, body: base.replace('# Numeric order', '# Numeric order, edited') });
+    assert.ok(merged.includes('# Numeric order, edited'), 'edit lost');
+    assert.ok(merged.includes('## Agent was here'), 'agent note lost');
+    // Two different edits to the same line: refused, file unchanged.
+    const before = disk(cardIn(id).path);
+    await assert.rejects(
+      controller.saveBody({ id, base: merged, body: merged.replace('edited', 'mine') }).then(() =>
+        controller.saveBody({ id, base: merged, body: merged.replace('edited', 'theirs') }),
+      ),
+      (e) => e.name === 'BodyConflictError',
+    );
+    assert.ok(disk(cardIn(id).path).includes('Numeric order, mine'), disk(cardIn(id).path));
+    assert.notEqual(disk(cardIn(id).path), before);
+  },
 };
 
 /**
@@ -318,7 +407,7 @@ exports.run = async function run() {
       await fn();
       console.log(`  ✓ ${name}`);
     } catch (e) {
-      console.log(`  ✗ ${name}\n    ${e.stack?.split('\n').slice(0, 3).join('\n    ')}`);
+      console.log(`  ✗ ${name}\n    ${String(e.message).split('\n').join('\n    ')}\n    ${e.stack?.split('\n').find((l) => l.includes('suite.cjs')) ?? ''}`);
       failures.push(name);
     }
   }

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { BoardFile } from '../board.js';
 import { editCard } from '../edit.js';
 import { idForFilename } from '../filenames.js';
+import type { WriteRoute } from '../cliProtocol.js';
 import type { NewCard, Plan } from '../ops.js';
 import { ConflictError, exists, readVersioned, renameNoClobber, writeAtomic } from './atomicFile.js';
 
@@ -15,8 +16,8 @@ export interface WriteResult {
   path: string;
   /** mtime of the file on disk afterwards. Pass it to `edit --expect-mtime`. */
   mtimeMs: number;
-  /** The change went into an open editor with unsaved edits; the file on disk is unchanged. */
-  unsaved?: boolean;
+  /** How the change was applied; see WriteRoute. */
+  route: WriteRoute;
 }
 
 // Keep a BOM if there is one, so text matches the bytes on disk.
@@ -88,16 +89,16 @@ export async function applyPlanToFile(root: string, id: string, plan: Plan & { t
   const written = await readVersioned(fsPath);
   if (written.text !== next) throw new Error(`${plan.path} changed right after it was written. Check the file.`);
 
-  if (!plan.targetPath) return { path: plan.path, mtimeMs: written.version.mtimeMs };
+  if (!plan.targetPath) return { path: plan.path, mtimeMs: written.version.mtimeMs, route: 'disk' };
   await renameNoClobber(fsPath, join(root, plan.targetPath));
   const moved = await readVersioned(join(root, plan.targetPath));
-  return { path: plan.targetPath, mtimeMs: moved.version.mtimeMs };
+  return { path: plan.targetPath, mtimeMs: moved.version.mtimeMs, route: 'disk' };
 }
 
 /** Write a new card; never replaces an existing file (ConflictError if the name is taken). */
 export async function createCardFile(root: string, card: NewCard): Promise<WriteResult> {
   const version = await writeAtomic(join(root, card.path), card.text, null);
-  return { path: card.path, mtimeMs: version.mtimeMs };
+  return { path: card.path, mtimeMs: version.mtimeMs, route: 'disk' };
 }
 
 export function cardEdit(plan: Plan) {
@@ -105,5 +106,6 @@ export function cardEdit(plan: Plan) {
     fields: plan.changes,
     ...(plan.append !== undefined ? { append: plan.append } : {}),
     ...(plan.body !== undefined ? { body: plan.body } : {}),
+    ...(plan.rebase !== undefined ? { rebase: plan.rebase } : {}),
   };
 }

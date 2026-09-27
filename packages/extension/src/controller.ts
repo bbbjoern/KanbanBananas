@@ -1,4 +1,4 @@
-import type { CreateIntent, HostMessage, MoveIntent, SetFieldsIntent } from '@kanban-bananas/core';
+import { parseCard, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
@@ -20,6 +20,9 @@ export class BoardController implements vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
   private readonly subs: vscode.Disposable[] = [];
+  /** Errors reported by board webviews, and cards the split view showed. Read by integration tests. */
+  readonly clientErrors: string[] = [];
+  readonly shownInEditor: string[] = [];
 
   constructor(private readonly version: string) {
     this.subs.push(
@@ -112,6 +115,28 @@ export class BoardController implements vscode.Disposable {
       void vscode.window.showErrorMessage(`KanbanBananas: ${e instanceof Error ? e.message : String(e)}`);
       this.changed.fire();
     }
+  }
+
+  /** A card's path and body (with \n line endings, as editors use), or null if it's not a valid card. */
+  cardBody(id: string): { path: string; body: string } | null {
+    const card = this.board()?.cards.find((c) => c.card.fields.id === id);
+    const text = card && this.source?.text(card.path);
+    if (!card || text === undefined) return null;
+    const parsed = parseCard(text);
+    return parsed.ok ? { path: card.path, body: parsed.card.source.body.replace(/\r\n/g, '\n') } : null;
+  }
+
+  /** Save the inline editor's body. Throws BodyConflictError and others to the caller, which reports them. */
+  async saveBody(intent: SaveBodyIntent): Promise<string> {
+    if (!this.store) throw new Error('The board is not loaded.');
+    await this.store.saveBody(intent);
+    const now = this.cardBody(intent.id);
+    if (!now) throw new Error('The card is gone after saving.');
+    return now.body;
+  }
+
+  uriFor(path: string): vscode.Uri | undefined {
+    return this.source?.uriFor(path);
   }
 
   async openCardById(id: string): Promise<void> {

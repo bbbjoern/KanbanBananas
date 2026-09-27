@@ -9,3 +9,4 @@ export * from './patch.js';
 export * from './edit.js';
 export * from './cliProtocol.js';
 export * from './agentPolicy.js';
+export * from './merge.js';

@@ -11,8 +11,8 @@ const decoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /**
  * The latest text of every card file, re-read one file at a time as the
- * watcher reports changes. A card open in an editor is read from its buffer,
- * so the board shows unsaved edits and the board's own edits to them.
+ * watcher reports changes. A card open in an editor with unsaved edits is
+ * read from its buffer, so the board shows what the user sees.
  */
 export class BoardSource implements vscode.Disposable {
   private readonly files = new Map<string, string>();
@@ -38,11 +38,17 @@ export class BoardSource implements vscode.Disposable {
     this.watcher.onDidChange(onEvent);
     this.watcher.onDidDelete(onEvent);
 
+    // A buffer with unsaved edits is what the user sees, so the board shows it.
+    // A clean buffer may lag behind an outside change, so then the file is read.
     const fromDocument = (doc: vscode.TextDocument) => {
       const path = this.relativePath(doc.uri);
       if (path === null) return;
-      this.files.set(path, doc.getText());
-      this.scheduleEmit();
+      if (doc.isDirty) {
+        this.files.set(path, doc.getText());
+        this.scheduleEmit();
+      } else {
+        this.scheduleRead(path);
+      }
     };
     this.subs.push(
       vscode.workspace.onDidOpenTextDocument(fromDocument),
@@ -81,6 +87,11 @@ export class BoardSource implements vscode.Disposable {
 
   has(path: string): boolean {
     return this.files.has(path);
+  }
+
+  /** Current text of a card file (its buffer if open), as last read. */
+  text(path: string): string | undefined {
+    return this.files.get(path);
   }
 
   paths(): string[] {
@@ -131,7 +142,8 @@ export class BoardSource implements vscode.Disposable {
   private async read(path: string): Promise<void> {
     const seq = (this.readSeq.get(path) ?? 0) + 1;
     this.readSeq.set(path, seq);
-    let text: string | undefined = this.document(path)?.getText();
+    const doc = this.document(path);
+    let text: string | undefined = doc?.isDirty ? doc.getText() : undefined;
     if (text === undefined) {
       try {
         text = decoder.decode(await vscode.workspace.fs.readFile(this.uriFor(path)));

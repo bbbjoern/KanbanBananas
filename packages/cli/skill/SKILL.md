@@ -91,4 +91,4 @@ BODY
 
 `0` ok · `1` problem (no such card, broken card, `check` found errors) · `2` usage · `3` conflict (the card changed; re-read it) · `4` refused by project policy (`.devtool/kanban.json`).
 
-If the output says a change went into an open editor with unsaved edits, that's expected: the user's editor has it, and the file updates when they save.
+Every change also reports its `route`: `disk` (the file was written), `editor-saved` (the card was open in an editor; the change went in and was saved) or `editor-unsaved` (the card has unsaved edits in the user's editor; your change is in that editor and reaches the file when they save). `editor-unsaved` is expected and fine; don't retry.

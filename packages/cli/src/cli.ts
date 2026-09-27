@@ -272,7 +272,7 @@ class Context {
     for (let attempt = 1; ; attempt++) {
       const card = planCreate(board, full, this.now(), taken);
       try {
-        return this.reportWrite(await createCardFile(this.project.features, card), 'file');
+        return this.reportWrite(await createCardFile(this.project.features, card), 'cli');
       } catch (e) {
         if (!(e instanceof ConflictError) || attempt >= 3) throw e;
         taken.add(card.path);
@@ -345,7 +345,7 @@ class Context {
     const board = await this.board();
     const known = new Set([...board.cards.map((c) => c.path), ...board.broken.map((b) => b.path)]);
     const plan = await resolveTarget(this.project.features, makePlan(), known);
-    return this.reportWrite(await applyPlanToFile(this.project.features, id, plan), 'file');
+    return this.reportWrite(await applyPlanToFile(this.project.features, id, plan), 'cli');
   }
 
   private async viaExtension(request: CliRequest): Promise<CliResult | null> {
@@ -358,11 +358,20 @@ class Context {
     throw new Error(response.error);
   }
 
-  private reportWrite(result: CliResult, via: 'vscode' | 'file'): number {
+  /**
+   * Every write says how it was applied (`route`) and who applied it
+   * (`handledBy`: the running VS Code extension, or this CLI directly).
+   */
+  private reportWrite(result: CliResult, handledBy: 'vscode' | 'cli'): number {
     const path = this.display(result.path);
-    const lines = [path, `mtime: ${result.mtimeMs}`];
-    if (result.unsaved) lines.push('note: applied to an open editor with unsaved edits; the file on disk updates when the user saves.');
-    this.out({ path, mtimeMs: result.mtimeMs, unsaved: result.unsaved ?? false, via }, lines.join('\n'));
+    const lines = [path, `mtime: ${result.mtimeMs}`, `route: ${result.route} (${handledBy === 'vscode' ? 'applied by VS Code' : 'written by the CLI'})`];
+    if (result.route === 'editor-unsaved') {
+      lines.push('note: the card has unsaved edits in an editor; your change is in that editor and reaches the file when the user saves.');
+    }
+    this.out(
+      { path, mtimeMs: result.mtimeMs, route: result.route, handledBy, unsaved: result.route === 'editor-unsaved' },
+      lines.join('\n'),
+    );
     return EXIT.ok;
   }
 

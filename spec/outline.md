@@ -42,7 +42,7 @@ Root causes found in its source:
 - **Frontmatter:** `id, status, priority, assignee, epic, dueDate, created, modified, completedAt, labels, order`. Values are double-quoted strings or `null`, and `labels` is an inline array. No other keys exist today, but unknown keys must be preserved.
 - **Statuses in use** (corpus snapshot, 2026-09-25): `backlog` 15, `todo` 25, `in-progress` 8, `review` 12, `done` 48. Columns are configurable.
 - **Order:** fractional-index strings in base 62 (`"a1"`, `"Zl"`, `"ZSV"`), as produced by the `fractional-indexing` package. Duplicates exist (three cards share `"Zl"`), so sort by `order`, then `created`, then `id`. Only rewrite a card's key when that card is moved.
-- **Title:** the first `# ` heading in the body. A body can be just the title with no trailing newline.
+- **Title:** the first `# ` heading in the body. A body can be just the title with no trailing newline. **New cards** (board, commands or CLI) always end with a newline; existing cards keep whatever ending they have.
 - **Filename:** `<slug>-<YYYY-MM-DD>.md`, where the slug is lowercase `[a-z0-9-]` and at most 50 characters. Other patterns can be configured. `id` must equal the filename.
 - **Field usage:** `labels` is used. `assignee`, `epic` and `dueDate` are never set on this board, but must still be supported.
 - **Parser tolerance:** accept a BOM, CRLF line endings, and numeric `order: 0` (the readme shows this form).
@@ -92,10 +92,10 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - [ ] Filter by priority, assignee, label, unlabelled, and due date (overdue / today / this week / none)
 
 **Editing**
-- [ ] Split view: board on the left, inline editor on the right; saves automatically on change
-- [ ] Native mode: open the card in VS Code's own editor, with a frontmatter header panel above it (dropdowns and inputs)
-- [ ] Refreshes when files change outside the board
-- [ ] "Open file" from a card
+- [x] Split view: board on the left, inline editor on the right; saves automatically on change
+- [x] Native mode: open the card in VS Code's own editor, with a frontmatter header panel above it (dropdowns and inputs)
+- [x] Refreshes when files change outside the board
+- [x] "Open file" from a card
 
 **Bulk and management**
 - [ ] Move all cards in a column; archive all (with a confirmation dialog)
@@ -145,7 +145,7 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 | **M1** | Read-only board | Renders your real board identically; run it for a few days. **Built 2026-09-25; trial run in progress.** |
 | **M2** | Frontmatter writes: move, reorder, create, field edits | Patch and atomicity tests green. **Done 2026-09-25**; see the M2 notes below. |
 | **M2b** | CLI + agent skill (§12), socket to the running extension | Skill scenario tests green; agents use the CLI from here on. **Done 2026-09-26**; see §12 implementation notes. |
-| **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green |
+| **M3** | Editor integration: header panel, inline editor, native mode | Integration tests for unsaved buffers and cursor stability (§7) green. **Done 2026-09-26**; see the M3 notes below. |
 | **M4** | Search, filters, epic lanes, label management | Parity checklist for these sections |
 | **M5** | Archive, bulk moves, settings | Full parity checklist |
 | **M6** | Pre-commit hook, VSIX packaging | `kanban check` clean on the corpus |
@@ -156,6 +156,11 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Check-then-rename window:** the mtime/size check and the `rename()` are two steps, so an outside write landing in between (microseconds) can still be replaced. Inside the extension all writes are queued; the CLI closes the rest at M2b by routing through the extension's socket.
 - **Moves across `done/`:** the card is patched in place, then renamed. If the rename fails, the card is left with its new status in the old folder (a `wrong-folder` warning, nothing lost).
 - **Own-write detection (§2.7)** isn't needed yet: the board simply re-reads files it wrote. It becomes necessary with the inline editor in M3.
+
+**M3 notes:**
+- **Native mode header is a row of CodeLens links**, not a panel: VS Code can't put UI above its text editor, and a replacement editor would be a second writer. Lenses aren't text, so they can't move the cursor; the row always has the same seven items, so its height never changes.
+- **Inline editor sync:** outside changes reach the editor as small CodeMirror transactions rebased over unsaved typing; saves carry the body they were based on and are merged three-way (line-based) with anything that changed meanwhile. Overlapping edits to the same lines raise the conflict prompt (keep mine, take theirs, show diff). 200 randomized interleavings are part of the tests.
+- **Clean-but-stale buffers:** an open card without unsaved edits is only edited through its buffer if the buffer matches the file. If VS Code hasn't reloaded an outside change yet, the file is written directly and VS Code reloads. The board also reads clean buffers from disk. (Found by the integration tests: before this, a board change could land in a stale buffer and be left unsaved.)
 
 The CLI and skill sit at M2b, right after frontmatter writes, because agents write cards every session and need the safe path from the start.
 

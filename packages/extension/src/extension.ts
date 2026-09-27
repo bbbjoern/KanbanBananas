@@ -1,12 +1,14 @@
 import type { HostMessage } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
-import { attachBoard, webviewOptions } from './boardWebview.js';
+import { attachBoard, webviewOptions, type AttachedBoard } from './boardWebview.js';
+import { CardHeaderLens } from './codeLens.js';
 import { registerCardCommands } from './cardCommands.js';
 import { BoardController } from './controller.js';
+import { registerDiffProvider } from './diffView.js';
 import { createLog, log, reportError } from './log.js';
 import { checkSkill, installSkill, skillInstalled } from './skill.js';
 
-let panel: vscode.WebviewPanel | undefined;
+let panel: { view: vscode.WebviewPanel; board: AttachedBoard } | undefined;
 
 /** Returned from `activate` so integration tests can inspect the board. */
 export interface ExtensionApi {
@@ -38,23 +40,34 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }
   });
 
+  const openBoard = (): AttachedBoard => {
+    if (panel) {
+      panel.view.reveal();
+      return panel.board;
+    }
+    const view = vscode.window.createWebviewPanel('kanbanBananas.board', 'KanbanBananas', vscode.ViewColumn.Active, {
+      ...webviewOptions(context.extensionUri),
+      retainContextWhenHidden: true,
+    });
+    view.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
+    const board = attachBoard(view.webview, context.extensionUri, 'panel', controller);
+    panel = { view, board };
+    view.onDidDispose(() => {
+      board.dispose();
+      panel = undefined;
+    });
+    return board;
+  };
+
   context.subscriptions.push(
-    vscode.commands.registerCommand('kanbanBananas.openBoard', () => {
-      if (panel) {
-        panel.reveal();
-        return;
-      }
-      panel = vscode.window.createWebviewPanel('kanbanBananas.board', 'KanbanBananas', vscode.ViewColumn.Active, {
-        ...webviewOptions(context.extensionUri),
-        retainContextWhenHidden: true,
-      });
-      panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
-      const attached = attachBoard(panel.webview, context.extensionUri, 'panel', controller);
-      panel.onDidDispose(() => {
-        attached.dispose();
-        panel = undefined;
-      });
+    vscode.commands.registerCommand('kanbanBananas.openBoard', () => openBoard()),
+
+    vscode.commands.registerCommand('kanbanBananas.card.showOnBoard', (ctx: { cardId?: string } | undefined) => {
+      const board = openBoard();
+      if (ctx?.cardId) board.select(ctx.cardId);
     }),
+
+    vscode.languages.registerCodeLensProvider({ language: 'markdown' }, new CardHeaderLens(controller)),
 
     vscode.commands.registerCommand('kanbanBananas.reload', () => controller.start()),
 
@@ -87,6 +100,7 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
       }
     }),
     registerCardCommands(controller),
+    registerDiffProvider(),
 
     vscode.window.registerWebviewViewProvider('kanbanBananas.sidebar', {
       resolveWebviewView(view) {

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "fractional-indexing": "^4.0.0",
+    "node-diff3": "^3.2.1",
     "yaml": "^2.9.1"
   },
   "exports": {

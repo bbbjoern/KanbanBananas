@@ -118,6 +118,7 @@ describe('planCreate', () => {
         'order: "ZM"',
         '---',
         '# API Use for Admins/User Dashboard',
+        '',
       ].join('\n'),
     );
     const parsed = parseCard(created.text);

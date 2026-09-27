@@ -24,10 +24,19 @@ export type CliRequest =
   | { op: 'edit'; intent: EditBodyIntent }
   | { op: 'create'; intent: CreateIntent };
 
+/**
+ * How a change was applied:
+ * - `disk`: the file was written (atomically).
+ * - `editor-saved`: the card was open in an editor with no unsaved edits; the edit went into it and it was saved.
+ * - `editor-unsaved`: the card was open with unsaved edits; the edit went into the editor and the file on disk
+ *   updates when the user saves.
+ */
+export type WriteRoute = 'disk' | 'editor-saved' | 'editor-unsaved';
+
 export interface CliResult {
   path: string;
   mtimeMs: number;
-  unsaved?: boolean;
+  route: WriteRoute;
 }
 
 export type CliErrorCode = 'conflict' | 'invalid' | 'error';
