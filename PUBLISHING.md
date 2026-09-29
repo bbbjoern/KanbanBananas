@@ -14,18 +14,30 @@ Published to the VS Code Marketplace and Open VSX (for Cursor and other VS Code 
    `npx ovsx create-namespace Hypertxtorg -p <token>`.
    For publishing, set `OVSX_PAT=<token>` in your shell (don't commit it).
 
+## Between releases
+
+Note every user-visible change under **`## Unreleased`** at the top of
+`packages/extension/CHANGELOG.md` as you go. Commits between releases get no tag.
+
 ## Each release
 
-1. Bump `version` in `packages/extension/package.json` and add an entry to `packages/extension/CHANGELOG.md`.
+1. **Version:** bump `version` in `packages/extension/package.json`, and rename `## Unreleased`
+   in `packages/extension/CHANGELOG.md` to that version (e.g. `## 1.2.0 (Preview)`).
 2. Run the checks: `npm run typecheck && npm test && npm run test:integration -w kanban-bananas`.
 3. Build the package: `npm run package -w kanban-bananas` → `packages/extension/kanban-bananas.vsix`.
-4. Publish the same file to both:
+   Check it still has no `keywords` (see "Marketplace content filter" below).
+4. **Try it:** install the `.vsix` (Extensions → ⋯ → Install from VSIX…), then **reload the window**
+   (Developer: Reload Window). Without the reload, VS Code keeps running the previous version's code,
+   and new features look broken. The KanbanBananas log shows which build is running.
+5. Commit, tag and push, tag included:
+   `git commit …`, `git tag -a v<version> -m "KanbanBananas <version>"`, `git push origin main --follow-tags`.
+   (Plain `git push` doesn't send tags.)
+6. Publish the same file to both:
    - **Marketplace, by upload (simplest):** marketplace.visualstudio.com/manage → publisher `Hypertxtorg`.
      First release: **New extension → Visual Studio Code**, upload the `.vsix`. Later releases:
      the extension's **⋯ → Update**, upload the new `.vsix`. No token needed.
    - Marketplace, by command (alternative): `npm run publish:marketplace -w kanban-bananas` (needs `vsce login` above).
    - Open VSX: `npm run publish:openvsx -w kanban-bananas` (needs `OVSX_PAT`)
-5. Commit and tag: `git tag v<version>`.
 
 The README's screenshots are loaded from GitHub (`raw/HEAD/packages/extension/media/screenshots`),
 so the repository must be public for them to show on the Marketplace page. Screenshots use invented
