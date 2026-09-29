@@ -8,7 +8,8 @@ import { tags } from '@lezer/highlight';
 import { useEffect, useRef, useState } from 'react';
 import { BodySync } from '../bodySync.js';
 import { onHostMessage, vscode } from '../vscode.js';
-import { livePreview } from './livePreview.js';
+import { assetBase, livePreview } from './livePreview.js';
+import { imageFiles, imageInsert, prepareImage } from './pasteImage.js';
 
 const SAVE_DELAY_MS = 500;
 
@@ -32,12 +33,25 @@ type Conflict = { theirs: string };
  * editor is uncontrolled: React never passes the text back in, and outside
  * changes are applied as small transactions (spec §7).
  */
-export function InlineEditor(props: { id: string; live: boolean; onEscape: () => void }) {
+export function InlineEditor(props: {
+  id: string;
+  live: boolean;
+  onEscape: () => void;
+  /** How pasted images are stored. */
+  images: { format: 'webp' | 'png'; maxWidth: number };
+  /** Where the page can load project files from, for showing `/…` image links. */
+  assetBase: string;
+}) {
   const { id } = props;
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const syncRef = useRef<BodySync | null>(null);
   const liveMode = useRef(new Compartment());
+  const baseConfig = useRef(new Compartment());
+  const imageSettings = useRef(props.images);
+  imageSettings.current = props.images;
+  /** Images being saved: where each link goes, kept up to date as the text changes. */
+  const pendingImages = useRef(new Map<string, number>());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const escape = useRef(props.onEscape);
   escape.current = props.onEscape;
@@ -82,8 +96,12 @@ export function InlineEditor(props: { id: string; live: boolean; onEscape: () =>
           syntaxHighlighting(highlight),
           EditorView.lineWrapping,
           liveMode.current.of(props.live ? livePreview : []),
+          baseConfig.current.of(assetBase.of(props.assetBase)),
           EditorState.readOnly.of(false),
           EditorView.updateListener.of((u) => {
+            if (u.docChanged) {
+              for (const [key, pos] of pendingImages.current) pendingImages.current.set(key, u.changes.mapPos(pos, 1));
+            }
             for (const tr of u.transactions) {
               if (tr.docChanged && !tr.annotation(fromHost)) {
                 syncRef.current?.userEdit(tr.changes);
@@ -91,7 +109,25 @@ export function InlineEditor(props: { id: string; live: boolean; onEscape: () =>
               }
             }
           }),
-          EditorView.domEventHandlers({ blur: () => void flush() }),
+          EditorView.domEventHandlers({
+            blur: () => void flush(),
+            // Pasting or dropping an image saves it as a file and inserts its link.
+            paste: (event, view) => {
+              const files = imageFiles(event.clipboardData?.files);
+              if (files.length === 0) return false;
+              event.preventDefault();
+              void saveImages(files, view.state.selection.main.head);
+              return true;
+            },
+            drop: (event, view) => {
+              const files = imageFiles(event.dataTransfer?.files);
+              if (files.length === 0) return false;
+              event.preventDefault();
+              const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+              void saveImages(files, at);
+              return true;
+            },
+          }),
         ],
       }),
     });
@@ -103,7 +139,37 @@ export function InlineEditor(props: { id: string; live: boolean; onEscape: () =>
       }
     };
 
+    const saveImages = async (files: File[], at: number) => {
+      for (const file of files) {
+        const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        pendingImages.current.set(requestId, at);
+        setNotice('Saving image…');
+        try {
+          const { ext, data } = await prepareImage(file, imageSettings.current.format, imageSettings.current.maxWidth);
+          vscode.postMessage({ type: 'saveImage', requestId, id, ext, data });
+        } catch (e) {
+          pendingImages.current.delete(requestId);
+          setNotice(`The image couldn't be read: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    };
+
     const off = onHostMessage((m) => {
+      if (m.type === 'imageSaved' || m.type === 'imageError') {
+        const at = pendingImages.current.get(m.requestId);
+        if (at === undefined) return;
+        pendingImages.current.delete(m.requestId);
+        if (m.type === 'imageError') {
+          setNotice(`The image wasn't saved: ${m.message}`);
+          return;
+        }
+        setNotice(null);
+        // An ordinary edit: it saves and syncs like typing.
+        const pos = Math.min(at, view.state.doc.length);
+        const insert = imageInsert(view.state.doc.toString(), pos, m.link);
+        view.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } });
+        return;
+      }
       if (!('id' in m) || m.id !== id) return;
       switch (m.type) {
         case 'editorBody': {
@@ -162,6 +228,10 @@ export function InlineEditor(props: { id: string; live: boolean; onEscape: () =>
   useEffect(() => {
     viewRef.current?.dispatch({ effects: liveMode.current.reconfigure(props.live ? livePreview : []) });
   }, [props.live]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: baseConfig.current.reconfigure(assetBase.of(props.assetBase)) });
+  }, [props.assetBase]);
 
   const resolve = (choice: 'mine' | 'theirs') => {
     const view = viewRef.current;

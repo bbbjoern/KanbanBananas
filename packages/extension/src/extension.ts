@@ -7,7 +7,10 @@ import { BoardController } from './controller.js';
 import { registerDiffProvider } from './diffView.js';
 import { registerBoardCommands } from './boardCommands.js';
 import { registerLabelCommands } from './labelCommands.js';
+import { registerImagePasteAndDrop } from './images.js';
+import { storeImagesWithLfs } from './lfs.js';
 import { installPreCommitHook } from './preCommit.js';
+import { setupBoard } from './setup.js';
 import { createLog, log, reportError } from './log.js';
 import { checkSkill, installSkill, skillInstalled, skillState, type SkillState } from './skill.js';
 
@@ -30,7 +33,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   context.subscriptions.push(controller);
   const version = String(context.extension.packageJSON.version);
   const ready = controller.start();
-  void ready.then(async () => {
+  // The skill check runs once a board exists: now, or after the board is created on first run.
+  const afterBoardReady = async () => {
     const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
     if (!folder) {
       log.info('No board folder found, so no skill check');
@@ -42,7 +46,8 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     } catch (e) {
       reportError('Agent skill check failed', e);
     }
-  });
+  };
+  void ready.then(afterBoardReady);
 
   const openBoard = (): AttachedBoard => {
     if (panel) {
@@ -90,6 +95,26 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
 
     vscode.commands.registerCommand('kanbanBananas.showLog', () => log.show()),
+
+    registerImagePasteAndDrop(controller, controller.images),
+
+    vscode.commands.registerCommand('kanbanBananas.createBoard', async (action?: 'create' | 'choose' | 'openFolder') => {
+      try {
+        if (await setupBoard(controller, action ?? 'create')) void afterBoardReady();
+      } catch (e) {
+        reportError('Setting up the board failed', e);
+      }
+    }),
+
+    vscode.commands.registerCommand('kanbanBananas.imagesWithLfs', async () => {
+      const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
+      if (!folder) return reportError('Store Images with Git LFS', new Error('no board folder found in this workspace'));
+      try {
+        await storeImagesWithLfs(folder, controller.settingsNow.imagesFolder);
+      } catch (e) {
+        reportError('Setting up Git LFS failed', e);
+      }
+    }),
 
     vscode.commands.registerCommand('kanbanBananas.installPreCommitHook', async () => {
       const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);

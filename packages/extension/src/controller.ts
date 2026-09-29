@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
 import { CliServer } from './cliServer.js';
+import { CardImages } from './images.js';
 import { log } from './log.js';
 import { readSettings, SECTION, type Settings } from './settings.js';
 
@@ -22,6 +23,8 @@ export class BoardController implements vscode.Disposable {
   private readonly subs: vscode.Disposable[] = [];
   /** Errors reported by board webviews, and cards the split view showed. Read by integration tests. */
   readonly clientErrors: string[] = [];
+  /** Pasted images: saving, references, deleting with their card. */
+  readonly images = new CardImages(this);
   readonly shownInEditor: string[] = [];
 
   constructor(private readonly version: string) {
@@ -37,6 +40,17 @@ export class BoardController implements vscode.Disposable {
     );
   }
 
+  /**
+   * First run: create the features folder (and done/) in a workspace folder,
+   * then load the board. Only on request; nothing is created unasked.
+   */
+  async createBoard(folder: vscode.WorkspaceFolder): Promise<void> {
+    const root = vscode.Uri.joinPath(folder.uri, ...this.settings.featuresDirectory.split('/').filter(Boolean));
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, 'done'));
+    log.info(`Created the board folder ${root.fsPath}`);
+    await this.start();
+  }
+
   /** Find the features folder and load every card. Safe to call again to reload. */
   async start(): Promise<void> {
     this.sourceSub?.dispose();
@@ -50,7 +64,7 @@ export class BoardController implements vscode.Disposable {
     const root = await this.findRoot();
     log.info(root ? `Board folder: ${root.fsPath}` : `No "${this.settings.featuresDirectory}" folder in the workspace`);
     if (!root) {
-      this.problem = `No "${this.settings.featuresDirectory}" folder in this workspace. Set kanbanBananas.featuresDirectory to the folder that holds your cards.`;
+      this.problem = `No "${this.settings.featuresDirectory}" folder in this workspace.`;
       this.changed.fire();
       return;
     }
@@ -73,7 +87,10 @@ export class BoardController implements vscode.Disposable {
   }
 
   state(): HostMessage {
-    if (this.problem) return { type: 'error', message: this.problem };
+    if (this.problem) {
+      // Not an error on a fresh project: the page offers to create the board.
+      return { type: 'noBoard', featuresDirectory: this.settings.featuresDirectory, folderOpen: (vscode.workspace.workspaceFolders?.length ?? 0) > 0 };
+    }
     if (!this.source) return { type: 'error', message: 'Loading…' };
     return { type: 'state', board: this.source.view(), settings: this.settings.view };
   }
@@ -262,6 +279,24 @@ export class BoardController implements vscode.Disposable {
   renameAll(renames: PatternRename[]) {
     const byId = new Map(renames.map((r) => [r.id, r.filename]));
     return this.eachCard([...byId.keys()], `Renamed to pattern ${this.settings.filenamePattern}`, (s, id) => s.rename(id, byId.get(id)!));
+  }
+
+  /** A card file's current text (its buffer if it has unsaved edits). */
+  cardText(path: string): string | undefined {
+    return this.source?.text(path);
+  }
+
+  /** Files in archived/, for image references and restore. */
+  async archivedFiles() {
+    return this.store ? this.store.archivedFiles() : [];
+  }
+
+  /** The id of the card a document is, if it is a card on the board. */
+  cardIdForDocument(uri: vscode.Uri): string | undefined {
+    if (!this.source) return undefined;
+    const target = uri.toString();
+    const card = this.board()?.cards.find((c) => this.source!.uriFor(c.path).toString() === target);
+    return card?.card.fields.id ?? undefined;
   }
 
   uriFor(path: string): vscode.Uri | undefined {

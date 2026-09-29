@@ -68,6 +68,8 @@ export interface ViewSettings {
   hideScrollbars: boolean;
   /** Column for new cards from the N shortcut. */
   defaultStatus: string;
+  /** How pasted images are stored: format (lossless WebP or PNG) and optional maximum width (0 = keep). */
+  images: { format: 'webp' | 'png'; maxWidth: number };
   show: {
     priority: boolean;
     assignee: boolean;
@@ -80,10 +82,16 @@ export interface ViewSettings {
 
 /** Messages from the extension host to the board webview. */
 export type HostMessage =
-  | { type: 'state'; board: BoardView; settings: ViewSettings }
+  /** `assetBase` is the project root as the page can load it, for showing `/…` image links. */
+  | { type: 'state'; board: BoardView; settings: ViewSettings; assetBase?: string }
   | { type: 'error'; message: string }
+  /** No board yet: offer to create one (`folderOpen`: a workspace folder is open to create it in). */
+  | { type: 'noBoard'; featuresDirectory: string; folderOpen: boolean }
   /** The inline editor's card: its body when opened, and again whenever someone else changes it. */
   | { type: 'editorBody'; id: string; path: string; body: string }
+  /** A pasted image was saved; `link` is what the card should reference. */
+  | { type: 'imageSaved'; requestId: string; link: string }
+  | { type: 'imageError'; requestId: string; message: string }
   /** A save from the inline editor was written; `body` is what the card holds now. */
   | { type: 'bodySaved'; id: string; body: string }
   /** A save overlapped someone else's change to the same lines; nothing was written. */
@@ -120,12 +128,16 @@ export type WebviewMessage =
   | { type: 'columnCommand'; action: 'new' | 'rename' | 'delete' | 'color'; status?: string; to?: string }
   /** Columns were dragged into a new order (their ids). */
   | { type: 'columnOrder'; order: string[] }
+  /** First run: create the board folder, point the setting at an existing folder, or open a folder. */
+  | { type: 'setupBoard'; action: 'create' | 'choose' | 'openFolder' }
   /** Open VS Code's Settings at this extension's settings. */
   | { type: 'openSettings' }
   /** View choices (lanes, wide editor, collapsed columns, filters…) to keep across sessions. Opaque to the host. */
   | { type: 'uiState'; state: unknown }
   /** Rename or delete a label across all cards; the host asks for details and confirmation. */
   | { type: 'labelCommand'; action: 'rename' | 'delete'; label?: string }
+  /** An image pasted or dropped into the inline editor, base64-encoded, to store for card `id`. */
+  | { type: 'saveImage'; requestId: string; id: string; ext: string; data: string }
   /** Something in the webview threw; the host logs it. */
   | { type: 'clientError'; message: string; stack?: string }
   /** The split view rendered this card (for tests). */

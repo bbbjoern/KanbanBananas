@@ -7,7 +7,11 @@ import { log } from './log.js';
 export type Layout = 'panel' | 'sidebar';
 
 export function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
-  return { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview')] };
+  // The workspace folders too, so the editor can show images pasted into cards.
+  return {
+    enableScripts: true,
+    localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist', 'webview'), ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri)],
+  };
 }
 
 /** Load the board UI into a webview and keep it in sync with the controller. */
@@ -28,6 +32,12 @@ export function attachBoard(
   webview.html = html(webview, extensionUri, layout, memento.get(uiKey));
   const post = (m: HostMessage) => void webview.postMessage(m);
   const editor = new EditorSession(controller, post);
+  // Board state plus where the page can load project files from (for /… image links).
+  const state = (): HostMessage => {
+    const s = controller.state();
+    const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
+    return s.type === 'state' && folder ? { ...s, assetBase: webview.asWebviewUri(folder.uri).toString() } : s;
+  };
   let ready = false;
   let pendingSelect: string | null = null;
 
@@ -37,7 +47,7 @@ export function attachBoard(
         case 'ready':
           log.info(`Board page (${layout}) loaded: build ${m.build ?? 'unknown (older than 0.5.4)'}`);
           ready = true;
-          post(controller.state());
+          post(state());
           if (pendingSelect) post({ type: 'selectCard', id: pendingSelect });
           pendingSelect = null;
           break;
@@ -99,6 +109,9 @@ export function attachBoard(
             .updateColumns((cols) => m.order.map((id) => cols.find((c) => c.id === id)).filter((c) => c !== undefined))
             .catch((e) => log.error(`Saving the column order failed: ${e instanceof Error ? e.message : String(e)}`));
           break;
+        case 'setupBoard':
+          void vscode.commands.executeCommand('kanbanBananas.createBoard', m.action);
+          break;
         case 'openSettings':
           // The id is publisher.name; look it up rather than hard-coding the publisher.
           void vscode.commands.executeCommand(
@@ -108,6 +121,16 @@ export function attachBoard(
           break;
         case 'labelCommand':
           void vscode.commands.executeCommand(m.action === 'rename' ? 'kanbanBananas.renameLabel' : 'kanbanBananas.deleteLabel', m.label);
+          break;
+        case 'saveImage':
+          void controller.images
+            .save(m.id, Buffer.from(m.data, 'base64'), m.ext)
+            .then((link) => post({ type: 'imageSaved', requestId: m.requestId, link }))
+            .catch((e) => {
+              const message = e instanceof Error ? e.message : String(e);
+              log.error(`Saving a pasted image failed: ${message}`);
+              post({ type: 'imageError', requestId: m.requestId, message });
+            });
           break;
         case 'clientError':
           log.error(`Board webview (${layout}): ${m.message}${m.stack ? `\n${m.stack}` : ''}`);
@@ -120,7 +143,7 @@ export function attachBoard(
     }),
     controller.onDidChange(() => {
       if (!ready) return;
-      post(controller.state());
+      post(state());
       editor.boardChanged();
     }),
   );
@@ -207,6 +230,7 @@ function html(webview: vscode.Webview, extensionUri: vscode.Uri, layout: Layout,
   const csp = [
     "default-src 'none'",
     `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `img-src ${webview.cspSource} https: data: blob:`,
     `script-src 'nonce-${nonce}'`,
     `font-src ${webview.cspSource}`,
   ].join('; ');

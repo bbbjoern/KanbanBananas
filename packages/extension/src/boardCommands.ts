@@ -59,14 +59,22 @@ export function registerBoardCommands(controller: BoardController): vscode.Dispo
       'kanbanBananas.card.delete',
       guarded('Deleting the card failed', async ({ cardId }) => {
         if (!cardId) return;
+        // Its images go with it, except those another card (active or archived) also links to.
+        const images = await controller.images.ofCard(cardId);
+        const n = images.own.length;
+        const withImages = n ? `, together with its ${n} image${n === 1 ? '' : 's'}` : '';
+        const kept = images.shared.length
+          ? ` ${images.shared.length} image${images.shared.length === 1 ? ' is' : 's are'} kept because other cards use ${images.shared.length === 1 ? 'it' : 'them'}.`
+          : '';
         const ok = await vscode.window.showWarningMessage(
-          `Delete the card "${cardTitle(cardId)}"? The file goes to the trash.`,
+          `Delete the card "${cardTitle(cardId)}"${withImages}? The files go to the trash.${kept}`,
           { modal: true },
           'Delete',
         );
         if (ok !== 'Delete') return;
         try {
           await controller.deleteCard(cardId, false);
+          await controller.images.delete(images.own, false);
         } catch (e) {
           // Remote machines often have no trash. Ask before deleting for good.
           const again = await vscode.window.showWarningMessage(
@@ -74,7 +82,10 @@ export function registerBoardCommands(controller: BoardController): vscode.Dispo
             { modal: true, detail: e instanceof Error ? e.message : String(e) },
             'Delete Permanently',
           );
-          if (again === 'Delete Permanently') await controller.deleteCard(cardId, true);
+          if (again === 'Delete Permanently') {
+            if (controller.board()?.cards.some((c) => c.card.fields.id === cardId)) await controller.deleteCard(cardId, true);
+            await controller.images.delete(images.own, true);
+          }
         }
       }),
     ),
@@ -218,6 +229,32 @@ export function registerBoardCommands(controller: BoardController): vscode.Dispo
           }
         }
         await controller.updateColumns((cols) => cols.filter((c) => c.id !== column.id));
+      }),
+    ),
+
+    vscode.commands.registerCommand(
+      'kanbanBananas.cleanUpImages',
+      guarded('Cleaning up images failed', async () => {
+        const unused = await controller.images.unused();
+        const folder = controller.settingsNow.imagesFolder;
+        if (unused.length === 0) return void vscode.window.showInformationMessage(`KanbanBananas: every image in ${folder} is used by a card.`);
+        const picked = await vscode.window.showQuickPick(
+          unused.map((p) => ({ label: p.slice(folder.length + 1), path: p, picked: true })),
+          { title: `${unused.length} image${unused.length === 1 ? '' : 's'} no card links to. Untick any to keep.`, canPickMany: true },
+        );
+        if (!picked?.length) return;
+        const ok = await vscode.window.showWarningMessage(`Delete ${picked.length} unused image${picked.length === 1 ? '' : 's'}? They go to the trash.`, { modal: true }, 'Delete');
+        if (ok !== 'Delete') return;
+        try {
+          await controller.images.delete(picked.map((p) => p.path), false);
+        } catch (e) {
+          const again = await vscode.window.showWarningMessage(
+            'This machine has no trash, so the images would be deleted permanently. Committed images can still be restored from git.',
+            { modal: true, detail: e instanceof Error ? e.message : String(e) },
+            'Delete Permanently',
+          );
+          if (again === 'Delete Permanently') await controller.images.delete(picked.map((p) => p.path), true);
+        }
       }),
     ),
 

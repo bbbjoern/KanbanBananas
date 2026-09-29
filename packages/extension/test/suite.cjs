@@ -585,7 +585,68 @@ const tests = {
     const ok = git('commit', '-q', '-m', 'fixed', '--allow-empty');
     assert.equal(ok.status, 0, ok.stderr);
   },
+
+  async 'images: saved per card, deleted with their card unless another card uses them, unused ones found'() {
+    const controller = api().controller;
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const a = (await store().create({ title: 'Has screenshots', status: 'todo' })).path.replace(/\.md$/, '');
+    const b = (await store().create({ title: 'Shares one', status: 'todo' })).path.replace(/\.md$/, '');
+
+    const own = await controller.images.save(a, png, 'png');
+    const shared = await controller.images.save(a, png, 'png');
+    assert.match(own, new RegExp(`^/\\.devtool/assets/${a}/\\d{4}-\\d{2}-\\d{2}-\\d{6}\\.png$`));
+    assert.notEqual(own, shared, 'second image in the same second must not overwrite the first');
+    assert.ok(fs.existsSync(path.join(root, own)));
+    await expectRejects(controller.images.save(a, png, 'exe'), /Not an image/);
+
+    const bodyA = controller.cardBody(a).body;
+    await controller.saveBody({ id: a, base: bodyA, body: `${bodyA}\n![](${own})\n![](${shared})\n` });
+    const bodyB = controller.cardBody(b).body;
+    await controller.saveBody({ id: b, base: bodyB, body: `${bodyB}\n![](${shared})\n` });
+
+    const images = await controller.images.ofCard(a);
+    assert.deepEqual(images, { own: [own.slice(1)], shared: [shared.slice(1)] });
+    await controller.deleteCard(a, false);
+    await controller.images.delete(images.own, false);
+    assert.ok(!fs.existsSync(path.join(root, own)), 'own image not deleted');
+    assert.ok(fs.existsSync(path.join(root, shared)), 'shared image deleted');
+
+    // An image no card links to shows up as unused.
+    const orphan = await controller.images.save(b, png, 'png');
+    assert.deepEqual(await controller.images.unused(), [orphan.slice(1)]);
+  },
+
+  async 'first run: no board folder offers setup, and Create Board makes one'() {
+    const controller = api().controller;
+    const config = vscode.workspace.getConfiguration('kanbanBananas');
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    await config.update('featuresDirectory', 'fresh/cards', vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => api().state().type === 'noBoard'), JSON.stringify(api().state()));
+    assert.equal(api().state().featuresDirectory, 'fresh/cards');
+    assert.ok(!fs.existsSync(path.join(root, 'fresh')), 'created a folder without being asked');
+
+    await vscode.commands.executeCommand('kanbanBananas.createBoard', 'create');
+    assert.ok(fs.existsSync(path.join(root, 'fresh/cards/done')), 'board folder not created');
+    assert.ok(await waitFor(() => api().state().type === 'state'));
+    assert.equal(api().state().board.cards.length, 0);
+    await store().create({ title: 'First card', status: 'backlog' });
+    assert.ok(fs.readdirSync(path.join(root, 'fresh/cards')).some((f) => f.startsWith('first-card')));
+
+    await config.update('featuresDirectory', undefined, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => api().state().type === 'state' && api().state().board.cards.length > 1));
+  },
 };
+
+async function expectRejects(promise, pattern) {
+  try {
+    await promise;
+  } catch (e) {
+    assert.match(e.message, pattern);
+    return;
+  }
+  assert.fail('expected a rejection');
+}
 
 /**
  * Run the bundled CLI from the workspace root with a real Node, like an agent would.

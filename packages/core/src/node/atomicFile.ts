@@ -47,7 +47,7 @@ export async function readVersioned(path: string): Promise<{ text: string; versi
  */
 export async function writeAtomic(
   path: string,
-  text: string,
+  text: string | Uint8Array,
   expected: FileVersion | null,
   hooks: WriteHooks = {},
 ): Promise<FileVersion> {
@@ -57,7 +57,7 @@ export async function writeAtomic(
 
   const fh = await open(tmp, 'wx', mode);
   try {
-    await fh.writeFile(text, 'utf8');
+    await fh.writeFile(text);
     await fh.sync();
   } catch (e) {
     await fh.close();

@@ -1,5 +1,5 @@
 import { syntaxTree } from '@codemirror/language';
-import type { EditorState, Range } from '@codemirror/state';
+import { Facet, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 
 /**
@@ -30,6 +30,51 @@ const MARKS: Record<string, string> = {
   Strikethrough: 'cm-lp-strike',
   Link: 'cm-lp-link',
 };
+
+/** Where the page can load project files from (for `/…` image links); empty when unknown. */
+export const assetBase = Facet.define<string, string>({ combine: (v) => v[0] ?? '' });
+
+/** Resolve an image link to something the page can load, or null if it can't show it. */
+export function imageSrc(url: string, base: string): string | null {
+  if (/^(https?:|data:)/i.test(url)) return url;
+  if (url.startsWith('/') && base) {
+    const path = url.split('/').map((seg) => encodeURIComponent(safeDecode(seg))).join('/');
+    return base.replace(/\/+$/, '') + path;
+  }
+  return null;
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+class ImageWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+  ) {
+    super();
+  }
+
+  override eq(other: ImageWidget): boolean {
+    return other.src === this.src && other.alt === this.alt;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-lp-image';
+    const img = document.createElement('img');
+    img.src = this.src;
+    img.alt = this.alt;
+    img.title = 'Click the line to edit the link';
+    wrap.appendChild(img);
+    return wrap;
+  }
+}
 
 class CheckboxWidget extends WidgetType {
   constructor(
@@ -103,6 +148,14 @@ function build(view: EditorView): DecorationSet {
           decos.push(hidden.range(node.from, node.to));
         } else if ((name === 'LinkMark' || name === 'URL') && node.node.parent?.name === 'Link' && !isActive(node.from)) {
           decos.push(hidden.range(node.from, node.to));
+        } else if (name === 'Image' && !isActive(node.from) && state.doc.lineAt(node.from).number === state.doc.lineAt(node.to).number) {
+          const url = node.node.getChild('URL');
+          const src = url ? imageSrc(state.doc.sliceString(url.from, url.to).replace(/^<|>$/g, ''), state.facet(assetBase)) : null;
+          if (src) {
+            const alt = /^!\[([^\]]*)\]/.exec(state.doc.sliceString(node.from, node.to))?.[1] ?? '';
+            decos.push(Decoration.replace({ widget: new ImageWidget(src, alt) }).range(node.from, node.to));
+            return false;
+          }
         } else if (name === 'TaskMarker') {
           const checked = /x/i.test(state.doc.sliceString(node.from, node.to));
           decos.push(Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(node.from, node.to));

@@ -28,6 +28,14 @@ if (res.ok) {
   (window as { __kanbanDevHost?: (m: { type: string; id?: string; body?: string }) => void }).__kanbanDevHost = (m) => {
     if (m.type === 'openEditor' && m.id) {
       window.postMessage({ type: 'editorBody', id: m.id, path: `${m.id}.md`, body: bodies[m.id] ?? '' }, '*');
+    } else if (m.type === 'saveImage') {
+      // Pretend to store it; report what arrived, for the paste test below.
+      const img = m as unknown as { requestId: string; id: string; ext: string; data: string };
+      (window as { __lastImage?: unknown }).__lastImage = { ext: img.ext, bytes: Math.round((img.data.length * 3) / 4) };
+      // The dev server has no project files, so hand back the image inline, to see it in the preview.
+      const mime = img.ext === 'svg' ? 'image/svg+xml' : `image/${img.ext === 'jpg' ? 'jpeg' : img.ext}`;
+      const link = new URLSearchParams(location.search).has('inlineImages') ? `data:${mime};base64,${img.data}` : `/.devtool/assets/${img.id}/test.${img.ext}`;
+      window.postMessage({ type: 'imageSaved', requestId: img.requestId, link }, '*');
     } else if (m.type === 'search') {
       const words = String((m as { query?: string }).query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
       const ids = data.board.cards
@@ -43,7 +51,44 @@ if (res.ok) {
   };
   const layout = new URLSearchParams(location.search).get('layout');
   if (layout === 'vertical') data.settings.layout = 'vertical';
-  window.postMessage({ type: data.type, board: data.board, settings: data.settings }, '*');
+  // ?noBoard: show the first-run welcome instead of the board.
+  if (new URLSearchParams(location.search).has('noBoard')) {
+    window.postMessage({ type: 'noBoard', featuresDirectory: '.devtool/features', folderOpen: true }, '*');
+  } else {
+    window.postMessage({ type: data.type, board: data.board, settings: data.settings, assetBase: location.origin }, '*');
+  }
+
+  // ?pasteTest: paste a generated screenshot into the open card's editor and report the result.
+  if (new URLSearchParams(location.search).has('pasteTest')) {
+    setTimeout(async () => {
+      const c = document.createElement('canvas');
+      c.width = 900;
+      c.height = 300;
+      const g = c.getContext('2d')!;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, 900, 300);
+      g.fillStyle = '#123';
+      g.font = '20px sans-serif';
+      g.fillText('A pasted screenshot', 20, 40);
+      const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/png'));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], 'image.png', { type: 'image/png' }));
+      const target = document.querySelector('.cm-content')!;
+      target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      setTimeout(() => {
+        const out = document.createElement('pre');
+        out.id = 'paste-result';
+        const text = [...document.querySelectorAll('.cm-line')].map((l) => l.textContent).join('\n');
+        out.textContent = JSON.stringify({
+          pngBytes: blob.size,
+          sent: (window as { __lastImage?: unknown }).__lastImage,
+          linkInText: /!\[\]\((\/\.devtool\/assets\/[^)]+|data:[^;]+)/.exec(text)?.[0] ?? null,
+          imgShown: document.querySelectorAll('.cm-lp-image img').length,
+        });
+        document.body.appendChild(out);
+      }, 1500);
+    }, 1500);
+  }
 } else window.postMessage({ type: 'error', message: 'No dev-board.json. Run the dev-board script first.' }, '*');
 
 export {};

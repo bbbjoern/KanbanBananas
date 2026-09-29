@@ -63,7 +63,9 @@ interface UiState {
 export function App({ layout }: { layout: Layout }) {
   const [board, setBoard] = useState<BoardView | null>(null);
   const [settings, setSettings] = useState<ViewSettings | null>(null);
+  const [assetBase, setAssetBase] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [noBoard, setNoBoard] = useState<{ featuresDirectory: string; folderOpen: boolean } | null>(null);
   // The page's own state survives hiding; the host's copy survives closing the board and reloading.
   const saved = (vscode.getState() ?? (window as { __KANBAN_UI_STATE__?: unknown }).__KANBAN_UI_STATE__ ?? undefined) as UiState | undefined;
   const [collapsed, setCollapsed] = useState<string[]>(saved?.collapsed ?? []);
@@ -92,9 +94,14 @@ export function App({ layout }: { layout: Layout }) {
       if (m.type === 'state') {
         setBoard(m.board);
         setSettings(m.settings);
+        setNoBoard(null);
+        setAssetBase(m.assetBase ?? '');
         setError(null);
       } else if (m.type === 'error') {
         setError(m.message);
+      } else if (m.type === 'noBoard') {
+        setNoBoard({ featuresDirectory: m.featuresDirectory, folderOpen: m.folderOpen });
+        setBoard(null);
       } else if (m.type === 'selectCard') {
         setSelected(m.id);
       } else if (m.type === 'searchResults') {
@@ -225,6 +232,7 @@ export function App({ layout }: { layout: Layout }) {
     }
   };
 
+  if (noBoard) return <Welcome {...noBoard} layout={layout} />;
   if (error) return <div className="message error">{error}</div>;
   if (!board || !settings) return <div className="message">Loading board…</div>;
 
@@ -309,6 +317,7 @@ export function App({ layout }: { layout: Layout }) {
           onToggleLive={() => setLive(!live)}
           wide={wide}
           onToggleWide={() => setWide(!wide)}
+          assetBase={assetBase}
           onClose={() => setSelected(null)}
         />
       )}
@@ -763,6 +772,41 @@ function ColumnHeader(props: {
         <button type="button" className="add" onClick={props.onAdd} title="New card (N)" aria-label={`New card in ${props.name}`}>
           +
         </button>
+      )}
+    </div>
+  );
+}
+
+/** First run: no board in this project yet. Nothing is created until the user asks. */
+function Welcome(props: { featuresDirectory: string; folderOpen: boolean; layout: Layout }) {
+  const setup = (action: 'create' | 'choose' | 'openFolder') => vscode.postMessage({ type: 'setupBoard', action });
+  return (
+    <div className={`welcome ${props.layout}`}>
+      <h2>No board in this project yet</h2>
+      {props.folderOpen ? (
+        <>
+          <p>
+            KanbanBananas keeps each card as a markdown file in <code>{props.featuresDirectory}/</code> (done cards in{' '}
+            <code>done/</code>). Create that folder to start a board, or use a folder that already holds cards.
+          </p>
+          <div className="welcome-actions">
+            <button type="button" className="primary" onClick={() => setup('create')}>
+              Create board
+            </button>
+            <button type="button" className="tool" onClick={() => setup('choose')}>
+              Use an existing folder…
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p>Open your project folder first; the board lives inside it.</p>
+          <div className="welcome-actions">
+            <button type="button" className="primary" onClick={() => setup('openFolder')}>
+              Open Folder…
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

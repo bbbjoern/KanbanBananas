@@ -1,4 +1,4 @@
-import { DEFAULT_COLUMNS, DEFAULT_FILENAME_PATTERN, GROUP_FIELDS, isValidFilenamePattern, type ColumnConfig, type GroupField, type LaneDef, type ViewSettings } from '@kanban-bananas/core';
+import { DEFAULT_COLUMNS, DEFAULT_FILENAME_PATTERN, DEFAULT_IMAGES_FOLDER, GROUP_FIELDS, isValidFilenamePattern, type ColumnConfig, type GroupField, type LaneDef, type ViewSettings } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 
 export const SECTION = 'kanbanBananas';
@@ -7,6 +7,8 @@ const LEGACY_SECTION = 'kanban-markdown';
 
 export interface Settings {
   featuresDirectory: string;
+  /** Images folder, relative to the workspace folder. */
+  imagesFolder: string;
   defaultPriority: string;
   /** Column for new cards from commands and N. */
   defaultStatus: string;
@@ -29,6 +31,7 @@ export function readSettings(): Settings {
   const pattern = get<string>('filenamePattern');
   const settings: Settings = {
     featuresDirectory: get<string>('featuresDirectory'),
+    imagesFolder: (get<string>('images.folder') || DEFAULT_IMAGES_FOLDER).replace(/^\/+|\/+$/g, ''),
     defaultPriority: get<string>('defaultPriority'),
     defaultStatus: '',
     filenamePattern: '',
@@ -41,6 +44,10 @@ export function readSettings(): Settings {
       layout: get<string>('layout') === 'vertical' ? 'vertical' : 'horizontal',
       hideScrollbars: get<boolean>('hideScrollbars'),
       defaultStatus: '',
+      images: {
+        format: get<string>('images.format') === 'png' ? 'png' : 'webp',
+        maxWidth: Math.max(0, Math.floor(Number(get<number>('images.maxWidth')) || 0)),
+      },
       show: {
         priority: get<boolean>('showPriority'),
         assignee: get<boolean>('showAssignee'),

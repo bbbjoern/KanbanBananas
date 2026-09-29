@@ -177,6 +177,8 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Lanes:** Group by Epic, Assignee, Priority or Lane. Configured lanes (`kanbanBananas.lanes`, workspace settings) come first and show when empty; used values follow; "none" is last. Right-click a lane to rename or delete it (changes the field on its cards); "+ New lane" adds one to settings.
 - **Skill auto-update:** the extension compares the installed skill with what it would write. Older and untouched → updated automatically (notice afterwards); edited by hand → asks ("Update Anyway"); newer (e.g. a teammate's extension) → left alone. A `.manifest.json` in the skill folder records file hashes to tell hand edits apart. `kanbanBananas.autoUpdateSkill` turns it off.
 
+**Images (1.1.0, 2026-09-29):** pasted or dropped images are saved per card under `kanbanBananas.images.folder` (default `.devtool/assets/<card-id>/`) and linked root-relative (`/.devtool/assets/…`), so links survive moves into `done/` without touching card bodies. The board's editor encodes lossless WebP (keeping the pasted PNG when that's smaller) and can scale down; VS Code's own editor gets the same storage through a paste/drop provider for card files (keeps the pasted format). Deleting a card deletes the images only it links to (active and archived cards are checked); "Clean Up Unused Images" lists orphans. Git LFS is an explicit command, not a setting.
+
 **Terminology (settled 2026-09-27):** *columns* are the vertical status stages; *swimlanes* are the optional horizontal grouping by a field. Earlier notes that say "lanes" mean swimlanes.
 
 The CLI and skill sit at M2b, right after frontmatter writes, because agents write cards every session and need the safe path from the start.

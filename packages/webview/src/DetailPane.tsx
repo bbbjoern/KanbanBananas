@@ -20,6 +20,7 @@ export function DetailPane(props: {
   wide: boolean;
   onToggleWide: () => void;
   onClose: () => void;
+  assetBase: string;
 }) {
   const { card, settings } = props;
   const id = card.fields.id!;
@@ -102,7 +103,14 @@ export function DetailPane(props: {
       </div>
 
       <ErrorBoundary>
-        <InlineEditor key={id} id={id} live={props.live} onEscape={props.onClose} />
+        <InlineEditor
+          key={id}
+          id={id}
+          live={props.live}
+          onEscape={props.onClose}
+          images={settings.images ?? { format: 'webp', maxWidth: 0 }}
+          assetBase={props.assetBase}
+        />
       </ErrorBoundary>
     </aside>
   );

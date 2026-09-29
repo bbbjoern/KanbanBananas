@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a command line so coding agents can update cards safely.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "Hypertxtorg",
   "license": "MIT",
   "repository": {
@@ -178,6 +178,21 @@
       {
         "command": "kanbanBananas.installPreCommitHook",
         "title": "Install Pre-commit Hook (kanban check)",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.cleanUpImages",
+        "title": "Clean Up Unused Images\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.imagesWithLfs",
+        "title": "Store Images with Git LFS\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.createBoard",
+        "title": "Create Board",
         "category": "KanbanBananas"
       }
     ],
@@ -649,7 +664,41 @@
           "type": "boolean",
           "default": true,
           "description": "Update the installed agent skill automatically when a newer extension version brings a newer one. Never replaces a newer skill or one that was edited by hand."
+        },
+        "kanbanBananas.images.format": {
+          "type": "string",
+          "enum": [
+            "webp",
+            "png"
+          ],
+          "default": "webp",
+          "enumDescriptions": [
+            "Lossless WebP: pixel-identical to the screenshot, usually a fraction of the PNG size.",
+            "PNG."
+          ],
+          "description": "Format for images pasted into the board's editor. (VS Code's own editor keeps the pasted format.)"
+        },
+        "kanbanBananas.images.maxWidth": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Scale pasted images down to at most this many pixels wide. 0 keeps the original size."
+        },
+        "kanbanBananas.images.folder": {
+          "type": "string",
+          "default": ".devtool/assets",
+          "markdownDescription": "Where pasted images are stored, relative to the workspace folder: one subfolder per card. Cards link them from the project root (`/.devtool/assets/\u2026`), so links survive moving a card to Done."
         }
+      }
+    },
+    "configurationDefaults": {
+      "[markdown]": {
+        "editor.pasteAs.preferences": [
+          "markdown.link.image.kanbanBananas"
+        ],
+        "editor.dropIntoEditor.preferences": [
+          "markdown.link.image.kanbanBananas"
+        ]
       }
     }
   },

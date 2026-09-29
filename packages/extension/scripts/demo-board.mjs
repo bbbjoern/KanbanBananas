@@ -69,6 +69,7 @@ const message = {
     layout: 'horizontal',
     hideScrollbars: false,
     defaultStatus: 'backlog',
+    images: { format: 'webp', maxWidth: 0 },
     show: { priority: true, assignee: true, dueDate: true, labels: true, epic: true, filename: false },
   },
 };
