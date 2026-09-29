@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 (Preview)
 
 - **Clearer settings:** grouped into Board, Cards, New cards, Swimlanes, Images and Agents, in VS Code's Settings and on the extension page.
 - Clearer names for card and column actions in the right-click menus (for example "Archive Card", "Move All Cards in Column to…").
 - Extension page (Details) updated: screenshots in cards, first-run setup, keyboard shortcuts, the pre-commit hook.
+- The KanbanBananas log records what each image paste or drop contained, to diagnose paste problems. (If a new feature seems missing after an update, reload the window.)
 
 ## 1.1.0 (Preview)
 
