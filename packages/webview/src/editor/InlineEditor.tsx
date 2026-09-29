@@ -113,7 +113,12 @@ export function InlineEditor(props: {
             blur: () => void flush(),
             // Pasting or dropping an image saves it as a file and inserts its link.
             paste: (event, view) => {
-              const files = imageFiles(event.clipboardData?.files);
+              const cd = event.clipboardData;
+              const files = imageFiles(cd?.files);
+              vscode.postMessage({
+                type: 'clientLog',
+                message: `paste: types=[${[...(cd?.types ?? [])].join(', ')}] files=${cd?.files.length ?? 0} items=[${[...(cd?.items ?? [])].map((i) => `${i.kind}:${i.type}`).join(', ')}] images=${files.length}`,
+              });
               if (files.length === 0) return false;
               event.preventDefault();
               void saveImages(files, view.state.selection.main.head);
@@ -121,6 +126,10 @@ export function InlineEditor(props: {
             },
             drop: (event, view) => {
               const files = imageFiles(event.dataTransfer?.files);
+              vscode.postMessage({
+                type: 'clientLog',
+                message: `drop: types=[${[...(event.dataTransfer?.types ?? [])].join(', ')}] files=${event.dataTransfer?.files.length ?? 0} images=${files.length}`,
+              });
               if (files.length === 0) return false;
               event.preventDefault();
               const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
@@ -146,6 +155,7 @@ export function InlineEditor(props: {
         setNotice('Saving image…');
         try {
           const { ext, data } = await prepareImage(file, imageSettings.current.format, imageSettings.current.maxWidth);
+          vscode.postMessage({ type: 'clientLog', message: `image prepared: ${file.type} ${file.size} bytes → ${ext}, ${Math.round((data.length * 3) / 4)} bytes; sending` });
           vscode.postMessage({ type: 'saveImage', requestId, id, ext, data });
         } catch (e) {
           pendingImages.current.delete(requestId);

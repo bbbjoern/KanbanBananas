@@ -138,6 +138,8 @@ export type WebviewMessage =
   | { type: 'labelCommand'; action: 'rename' | 'delete'; label?: string }
   /** An image pasted or dropped into the inline editor, base64-encoded, to store for card `id`. */
   | { type: 'saveImage'; requestId: string; id: string; ext: string; data: string }
+  /** A line for the KanbanBananas log (diagnostics, e.g. what a paste contained). */
+  | { type: 'clientLog'; message: string }
   /** Something in the webview threw; the host logs it. */
   | { type: 'clientError'; message: string; stack?: string }
   /** The split view rendered this card (for tests). */

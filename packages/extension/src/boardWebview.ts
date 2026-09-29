@@ -132,6 +132,9 @@ export function attachBoard(
               post({ type: 'imageError', requestId: m.requestId, message });
             });
           break;
+        case 'clientLog':
+          log.info(`Board page: ${m.message}`);
+          break;
         case 'clientError':
           log.error(`Board webview (${layout}): ${m.message}${m.stack ? `\n${m.stack}` : ''}`);
           controller.clientErrors.push(m.message + (m.stack ? '\n' + m.stack.split('\n').slice(0, 6).join('\n') : ''));

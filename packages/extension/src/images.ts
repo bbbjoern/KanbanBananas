@@ -140,6 +140,9 @@ export function registerImagePasteAndDrop(controller: BoardController, images: C
 
   const edit = async (doc: vscode.TextDocument, dataTransfer: vscode.DataTransfer): Promise<string | undefined> => {
     const cardId = controller.cardIdForDocument(doc.uri);
+    const types: string[] = [];
+    dataTransfer.forEach((item, mime) => types.push(`${mime}${item.asFile() ? ' (file)' : ''}`));
+    log.info(`Editor paste/drop into ${vscode.workspace.asRelativePath(doc.uri)}: card=${cardId ?? 'not a card'}, data=[${types.join(', ')}]`);
     if (!cardId) return undefined;
     const links: string[] = [];
     for (const [mime, item] of dataTransfer) {
