@@ -1,4 +1,4 @@
-import { IntentError, PatchError, SOCKET_RECORD, type CliRequest, type CliResponse, type SocketRecord } from '@kanban-bananas/core';
+import { IntentError, PatchError, SOCKET_RECORD, type CliRequest, type CliResponse, type CliResult, type SocketRecord } from '@kanban-bananas/core';
 import { ConflictError } from '@kanban-bananas/core/node';
 import { createHash } from 'node:crypto';
 import { chmod, readFile, unlink, writeFile } from 'node:fs/promises';
@@ -27,6 +27,7 @@ export class CliServer implements vscode.Disposable {
     private readonly store: CardStore,
     private readonly settings: () => Settings,
     private readonly version: string,
+    private readonly memory: (body: string) => Promise<CliResult>,
   ) {
     const hash = createHash('sha256').update(featuresRoot).digest('hex').slice(0, 12);
     this.socketPath = join(tmpdir(), `kanban-bananas-${hash}-${process.pid}.sock`);
@@ -85,6 +86,8 @@ export class CliServer implements vscode.Disposable {
           return { ok: true, version: this.version, result: await store.note(request.intent) };
         case 'edit':
           return { ok: true, version: this.version, result: await store.editBody(request.intent) };
+        case 'memory':
+          return { ok: true, version: this.version, result: await this.memory(request.body) };
         case 'create': {
           const s = this.settings();
           const intent = {

@@ -205,6 +205,13 @@ The CLI and skill sit at M2b, right after frontmatter writes, because agents wri
 
 ---
 
+## Backlog (ideas, not scheduled)
+
+- ~~Board closes on window reload~~: done (webview panel serializer), unreleased.
+- ~~Session memory~~: done, unreleased. Settings `kanbanBananas.sessionMemory.*` (enabled, file, keep 1–10, personal → `.git/info/exclude`); `kanban memory` in the CLI (via the extension when running); board widget above the first column; skill section and `.claude/commands/session-memory.md` while enabled.
+
+- **Column info (2026-09-29):** an optional description per column saying what it's for, for columns whose purpose isn't obvious. Stored as `description` on the column in `kanbanBananas.columns`. Edited via right-click → *Edit Column Info…*; shown as a small ⓘ after the column name (only when set) with the text on hover, and as a grey line under the name in the vertical layout. The agent skill lists the descriptions next to the statuses, so agents know which column a card belongs in.
+
 ## 12. Agent skill (first-class deliverable)
 
 **Principle: agents never write card files. They call the CLI; the skill only teaches how.** The file format lives in one place, `core`, so the skill can't drift from it. Agents may still *read* cards freely (`cat`, `grep`).

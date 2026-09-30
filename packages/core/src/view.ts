@@ -80,10 +80,20 @@ export interface ViewSettings {
   };
 }
 
+/** The id the board's editor uses for the session memory file (cards use their own ids). */
+export const MEMORY_EDITOR_ID = '#session-memory';
+
 /** Messages from the extension host to the board webview. */
 export type HostMessage =
   /** `assetBase` is the project root as the page can load it, for showing `/…` image links. */
-  | { type: 'state'; board: BoardView; settings: ViewSettings; assetBase?: string }
+  | {
+      type: 'state';
+      board: BoardView;
+      settings: ViewSettings;
+      assetBase?: string;
+      /** Session memory summary, when it's turned on: newest entry and its "Next:". */
+      memory?: { file: string; updated: string | null; next: string | null; latest: string | null };
+    }
   | { type: 'error'; message: string }
   /** No board yet: offer to create one (`folderOpen`: a workspace folder is open to create it in). */
   | { type: 'noBoard'; featuresDirectory: string; folderOpen: boolean }
@@ -130,6 +140,8 @@ export type WebviewMessage =
   | { type: 'columnOrder'; order: string[] }
   /** First run: create the board folder, point the setting at an existing folder, or open a folder. */
   | { type: 'setupBoard'; action: 'create' | 'choose' | 'openFolder' }
+  /** Open the session memory file in VS Code's editor. */
+  | { type: 'openMemory' }
   /** Open VS Code's Settings at this extension's settings. */
   | { type: 'openSettings' }
   /** View choices (lanes, wide editor, collapsed columns, filters…) to keep across sessions. Opaque to the host. */

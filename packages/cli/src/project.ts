@@ -17,6 +17,8 @@ export interface ProjectConfig {
 }
 
 export interface Project {
+  /** The project root: the folder holding `.devtool` (session memory paths are relative to it). */
+  root: string;
   /** Absolute path of the features directory. */
   features: string;
   /** Where the running extension records its socket. */
@@ -37,7 +39,8 @@ export function findProject(cwd: string, dirOption: string | undefined): Project
   if (dirOption) {
     const features = resolve(cwd, dirOption);
     if (!isDir(features)) throw new UsageError(`Not a directory: ${features}`);
-    return project(features, readConfig(join(dirname(features), 'kanban.json')));
+    // With --dir the root isn't known; assume the default layout, <root>/.devtool/features.
+    return project(dirname(dirname(features)), features, readConfig(join(dirname(features), 'kanban.json')));
   }
   for (let dir = resolve(cwd); ; dir = dirname(dir)) {
     const devtool = join(dir, '.devtool');
@@ -45,15 +48,16 @@ export function findProject(cwd: string, dirOption: string | undefined): Project
       const config = readConfig(join(devtool, 'kanban.json'));
       const features = resolve(dir, config.featuresDirectory ?? '.devtool/features');
       if (!isDir(features)) throw new UsageError(`No features directory at ${features}.`);
-      return project(features, config);
+      return project(dir, features, config);
     }
     if (dirname(dir) === dir) break;
   }
   throw new UsageError('No .devtool folder found here or above. Run this inside the project, or pass --dir <features dir>.');
 }
 
-function project(features: string, config: ProjectConfig): Project {
+function project(root: string, features: string, config: ProjectConfig): Project {
   return {
+    root,
     features,
     socketRecord: join(dirname(features), SOCKET_RECORD),
     config,

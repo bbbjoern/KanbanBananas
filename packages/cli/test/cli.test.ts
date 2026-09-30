@@ -66,6 +66,40 @@ describe('reading', () => {
   });
 });
 
+describe('session memory', () => {
+  const policy = { agentsMayMoveCards: 'notToDone' as const, sessionMemory: { file: '.devtool/session-memory.md', keep: 1 } };
+  async function mem(args: string[], stdin = '', withPolicy = true) {
+    let stdout = '';
+    let stderr = '';
+    const code = await run(args, {
+      cwd: project,
+      env: { KANBAN_NOW: NOW },
+      stdout: (s) => void (stdout += s),
+      stderr: (s) => void (stderr += s),
+      readStdin: async () => stdin,
+      ...(withPolicy ? { skillPolicy: policy } : {}),
+    });
+    return { code, stdout, stderr };
+  }
+
+  it('is refused while the setting is off', async () => {
+    const r = await mem(['memory'], '', false);
+    expect(r.code).toBe(EXIT.usage);
+    expect(r.stderr).toMatch(/Session memory is off/);
+  });
+
+  it('saves the newest entry, keeps only the limit, and shows it', async () => {
+    expect((await mem(['memory'])).stdout).toMatch(/no session memory yet/);
+    expect((await mem(['memory', '--body', '-'], '**Next:** first')).code).toBe(EXIT.ok);
+    const r = await mem(['memory', '--body', '-', '--json'], '**Working on:** x\n**Next:** second');
+    expect(JSON.parse(r.stdout)).toMatchObject({ path: '.devtool/session-memory.md', route: 'disk' });
+    const file = readFileSync(join(project, '.devtool/session-memory.md'), 'utf8');
+    expect(file).toContain('**Next:** second');
+    expect(file).not.toContain('**Next:** first');
+    expect((await mem(['memory'])).stdout).toContain('**Next:** second');
+  });
+});
+
 describe('writing (no VS Code running)', () => {
   it('spec §12: a note on a card that moved to done/ lands in done/, and no new file appears', async () => {
     await kanban(['move', 'add-login-page-2026-09-01', 'done']);

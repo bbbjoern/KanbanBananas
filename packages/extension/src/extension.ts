@@ -49,15 +49,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   };
   void ready.then(afterBoardReady);
 
-  const openBoard = (): AttachedBoard => {
-    if (panel) {
-      panel.view.reveal();
-      return panel.board;
-    }
-    const view = vscode.window.createWebviewPanel('kanbanBananas.board', 'KanbanBananas', vscode.ViewColumn.Active, {
-      ...webviewOptions(context.extensionUri),
-      retainContextWhenHidden: true,
-    });
+  /** Set up a board tab: a new one, or one VS Code restores after a reload. */
+  const adoptPanel = (view: vscode.WebviewPanel): AttachedBoard => {
+    view.webview.options = webviewOptions(context.extensionUri);
     view.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
     const board = attachBoard(view.webview, context.extensionUri, 'panel', controller, context.workspaceState);
     panel = { view, board };
@@ -68,8 +62,31 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     return board;
   };
 
+  const openBoard = (): AttachedBoard => {
+    if (panel) {
+      panel.view.reveal();
+      return panel.board;
+    }
+    const view = vscode.window.createWebviewPanel('kanbanBananas.board', 'KanbanBananas', vscode.ViewColumn.Active, {
+      ...webviewOptions(context.extensionUri),
+      retainContextWhenHidden: true,
+    });
+    return adoptPanel(view);
+  };
+
   context.subscriptions.push(
     vscode.commands.registerCommand('kanbanBananas.openBoard', () => openBoard()),
+
+    // Reopen the board tab after VS Code reloads, where it was. Its view choices are stored per project already.
+    vscode.window.registerWebviewPanelSerializer('kanbanBananas.board', {
+      async deserializeWebviewPanel(view) {
+        if (panel) {
+          view.dispose();
+          return;
+        }
+        adoptPanel(view);
+      },
+    }),
 
     vscode.commands.registerCommand('kanbanBananas.card.showOnBoard', (ctx: { cardId?: string } | undefined) => {
       const board = openBoard();
@@ -134,7 +151,13 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     // The skill's wording and policy.json follow the setting, so rewrite it when the setting changes.
     vscode.workspace.onDidChangeConfiguration(async (e) => {
       // Also the columns: the skill lists them and the CLI accepts only those statuses.
-      if (!e.affectsConfiguration('kanbanBananas.agentsMayMoveCards') && !e.affectsConfiguration('kanbanBananas.columns')) return;
+      if (
+        !e.affectsConfiguration('kanbanBananas.agentsMayMoveCards') &&
+        !e.affectsConfiguration('kanbanBananas.columns') &&
+        !e.affectsConfiguration('kanbanBananas.sessionMemory')
+      ) {
+        return;
+      }
       const folder = controller.root && vscode.workspace.getWorkspaceFolder(controller.root);
       if (!folder || !skillInstalled(folder)) return;
       try {

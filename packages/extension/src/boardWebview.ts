@@ -1,4 +1,4 @@
-import { BodyConflictError, type HostMessage, type WebviewMessage } from '@kanban-bananas/core';
+import { BodyConflictError, MEMORY_EDITOR_ID, type HostMessage, type WebviewMessage } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import type { BoardController } from './controller.js';
 import { showDiff } from './diffView.js';
@@ -112,6 +112,14 @@ export function attachBoard(
         case 'setupBoard':
           void vscode.commands.executeCommand('kanbanBananas.createBoard', m.action);
           break;
+        case 'openMemory': {
+          const uri = controller.memory.uri();
+          if (uri) void vscode.workspace.fs.stat(uri).then(
+            () => vscode.window.showTextDocument(uri, { preview: false }),
+            () => vscode.window.showInformationMessage('KanbanBananas: no session memory yet. Agents add the first entry, e.g. with /session-memory in Claude Code.'),
+          );
+          break;
+        }
         case 'openSettings':
           // The id is publisher.name; look it up rather than hard-coding the publisher.
           void vscode.commands.executeCommand(
@@ -174,9 +182,9 @@ class EditorSession {
   ) {}
 
   open(id: string): void {
-    const card = this.controller.cardBody(id);
+    const card = this.controller.editorDoc(id);
     if (!card) {
-      this.post({ type: 'editorClosed', id, reason: 'The card is broken or gone.' });
+      this.post({ type: 'editorClosed', id, reason: id === MEMORY_EDITOR_ID ? 'Session memory is off.' : 'The card is broken or gone.' });
       return;
     }
     this.id = id;
@@ -192,7 +200,7 @@ class EditorSession {
   /** After any board change: push the body if someone else changed it. */
   boardChanged(): void {
     if (this.id === null) return;
-    const card = this.controller.cardBody(this.id);
+    const card = this.controller.editorDoc(this.id);
     if (!card) {
       this.post({ type: 'editorClosed', id: this.id, reason: 'The card was deleted, renamed or can no longer be read.' });
       this.close();
@@ -205,7 +213,7 @@ class EditorSession {
 
   async save(id: string, base: string, body: string): Promise<void> {
     try {
-      const result = await this.controller.saveBody({ id, base, body });
+      const result = await this.controller.saveEditorDoc({ id, base, body });
       if (this.id === id) this.known = result;
       this.post({ type: 'bodySaved', id, body: result });
     } catch (e) {
@@ -222,7 +230,7 @@ class EditorSession {
   }
 
   async diff(id: string, mine: string): Promise<void> {
-    const card = this.controller.cardBody(id);
+    const card = this.controller.editorDoc(id);
     if (card) await showDiff(card.body, mine, card.path.slice(card.path.lastIndexOf('/') + 1));
   }
 }

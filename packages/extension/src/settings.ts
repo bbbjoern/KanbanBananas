@@ -1,4 +1,4 @@
-import { DEFAULT_COLUMNS, DEFAULT_FILENAME_PATTERN, DEFAULT_IMAGES_FOLDER, GROUP_FIELDS, isValidFilenamePattern, type ColumnConfig, type GroupField, type LaneDef, type ViewSettings } from '@kanban-bananas/core';
+import { DEFAULT_COLUMNS, DEFAULT_FILENAME_PATTERN, DEFAULT_IMAGES_FOLDER, DEFAULT_MEMORY_FILE, MAX_MEMORY_ENTRIES, GROUP_FIELDS, isValidFilenamePattern, type ColumnConfig, type GroupField, type LaneDef, type ViewSettings } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 
 export const SECTION = 'kanbanBananas';
@@ -9,6 +9,7 @@ export interface Settings {
   featuresDirectory: string;
   /** Images folder, relative to the workspace folder. */
   imagesFolder: string;
+  sessionMemory: { enabled: boolean; file: string; keep: number; personal: boolean };
   defaultPriority: string;
   /** Column for new cards from commands and N. */
   defaultStatus: string;
@@ -32,6 +33,12 @@ export function readSettings(): Settings {
   const settings: Settings = {
     featuresDirectory: get<string>('featuresDirectory'),
     imagesFolder: (get<string>('images.folder') || DEFAULT_IMAGES_FOLDER).replace(/^\/+|\/+$/g, ''),
+    sessionMemory: {
+      enabled: get<boolean>('sessionMemory.enabled') === true,
+      file: (get<string>('sessionMemory.file') || DEFAULT_MEMORY_FILE).replace(/^\/+/, ''),
+      keep: Math.min(Math.max(Math.floor(Number(get<number>('sessionMemory.keep')) || 1), 1), MAX_MEMORY_ENTRIES),
+      personal: get<boolean>('sessionMemory.personal') === true,
+    },
     defaultPriority: get<string>('defaultPriority'),
     defaultStatus: '',
     filenamePattern: '',

@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a command line so coding agents can update cards safely.",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "publisher": "Hypertxtorg",
   "license": "MIT",
   "repository": {
@@ -24,7 +24,8 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "workspaceContains:.devtool/features"
+    "workspaceContains:.devtool/features",
+    "onWebviewPanel:kanbanBananas.board"
   ],
   "contributes": {
     "commands": [
@@ -714,6 +715,33 @@
             "type": "boolean",
             "default": true,
             "description": "Update the installed agent skill automatically when a newer extension version brings a newer one. Never replaces a newer skill or one that was edited by hand."
+          }
+        }
+      },
+      {
+        "title": "KanbanBananas: Session memory",
+        "properties": {
+          "kanbanBananas.sessionMemory.enabled": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Keep a **session memory**: where the work stands, shown in the board's top-left corner and opened like a card. Agents update it (in Claude Code: `/session-memory`) and read it when a new session starts, so work continues after an interruption without the old conversation."
+          },
+          "kanbanBananas.sessionMemory.file": {
+            "type": "string",
+            "default": ".devtool/session-memory.md",
+            "markdownDescription": "The session memory file, relative to the project root. **Committed with the project** by default, so it follows you to other machines and cloud sessions. If several people work on the project, give each their own file (e.g. `.devtool/session-memory-ana.md`) or turn on *Personal*."
+          },
+          "kanbanBananas.sessionMemory.keep": {
+            "type": "number",
+            "default": 1,
+            "minimum": 1,
+            "maximum": 10,
+            "description": "How many entries to keep, newest first (1\u201310). Each entry is the complete current state, so one is usually enough."
+          },
+          "kanbanBananas.sessionMemory.personal": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Keep the session memory out of git for your clone only, by adding it to `.git/info/exclude` (not the shared `.gitignore`)."
           }
         }
       }

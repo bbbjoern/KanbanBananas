@@ -17,7 +17,10 @@ function readSkillPolicy(): SkillPolicy | undefined {
     const policy = JSON.parse(readFileSync(path, 'utf8')) as Partial<SkillPolicy>;
     if (!isAgentMovePolicy(policy.agentsMayMoveCards)) return undefined;
     const statuses = Array.isArray(policy.statuses) && policy.statuses.every((s) => typeof s === 'string') ? policy.statuses : undefined;
-    return { agentsMayMoveCards: policy.agentsMayMoveCards, ...(statuses?.length ? { statuses } : {}) };
+    const memory = policy.sessionMemory;
+    const sessionMemory =
+      memory && typeof memory.file === 'string' && typeof memory.keep === 'number' ? { file: memory.file, keep: memory.keep } : undefined;
+    return { agentsMayMoveCards: policy.agentsMayMoveCards, ...(statuses?.length ? { statuses } : {}), ...(sessionMemory ? { sessionMemory } : {}) };
   } catch {
     return undefined;
   }

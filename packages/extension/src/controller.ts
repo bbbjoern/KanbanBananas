@@ -1,9 +1,10 @@
-import { labelCounts, loadBoard, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
+import { labelCounts, loadBoard, MEMORY_EDITOR_ID, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
 import { CliServer } from './cliServer.js';
 import { CardImages } from './images.js';
+import { SessionMemory } from './sessionMemory.js';
 import { log } from './log.js';
 import { readSettings, SECTION, type Settings } from './settings.js';
 
@@ -25,15 +26,19 @@ export class BoardController implements vscode.Disposable {
   readonly clientErrors: string[] = [];
   /** Pasted images: saving, references, deleting with their card. */
   readonly images = new CardImages(this);
+  /** The session memory file, when turned on in the settings. */
+  readonly memory = new SessionMemory(this);
   readonly shownInEditor: string[] = [];
 
   constructor(private readonly version: string) {
+    this.memory.onDidChange(() => this.changed.fire());
     this.subs.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (!e.affectsConfiguration(SECTION) && !e.affectsConfiguration('kanban-markdown')) return;
         const dirChanged = readSettings().featuresDirectory !== this.settings.featuresDirectory;
         this.settings = readSettings();
         if (dirChanged) void this.start();
+        else if (e.affectsConfiguration(`${SECTION}.sessionMemory`)) void this.memory.restart();
         else this.changed.fire();
       }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => void this.start()),
@@ -73,8 +78,9 @@ export class BoardController implements vscode.Disposable {
     this.store = new CardStore(source);
     this.sourceSub = source.onDidChange(() => this.changed.fire());
     await source.reload();
+    await this.memory.restart();
 
-    const server = new CliServer(root.fsPath, this.store, () => this.settings, this.version);
+    const server = new CliServer(root.fsPath, this.store, () => this.settings, this.version, (body) => this.memory.add(body));
     try {
       await server.start();
       this.cliServer = server;
@@ -86,13 +92,15 @@ export class BoardController implements vscode.Disposable {
     }
   }
 
+  /** Board state, with the session memory summary when it's on. */
   state(): HostMessage {
     if (this.problem) {
       // Not an error on a fresh project: the page offers to create the board.
       return { type: 'noBoard', featuresDirectory: this.settings.featuresDirectory, folderOpen: (vscode.workspace.workspaceFolders?.length ?? 0) > 0 };
     }
     if (!this.source) return { type: 'error', message: 'Loading…' };
-    return { type: 'state', board: this.source.view(), settings: this.settings.view };
+    const memory = this.memory.summary();
+    return { type: 'state', board: this.source.view(), settings: this.settings.view, ...(memory ? { memory } : {}) };
   }
 
   get settingsNow(): Settings {
@@ -146,6 +154,19 @@ export class BoardController implements vscode.Disposable {
     if (!card || text === undefined) return null;
     const parsed = parseCard(text);
     return parsed.ok ? { path: card.path, body: parsed.card.source.body.replace(/\r\n/g, '\n') } : null;
+  }
+
+  /** What the board's editor edits: a card's body, or the whole session memory file. */
+  editorDoc(id: string): { path: string; body: string } | null {
+    if (id === MEMORY_EDITOR_ID) {
+      return this.settings.sessionMemory.enabled && this.root ? { path: this.settings.sessionMemory.file, body: this.memory.text() } : null;
+    }
+    return this.cardBody(id);
+  }
+
+  /** Save from the board's editor (card or session memory); returns the text now stored. */
+  saveEditorDoc(intent: SaveBodyIntent): Promise<string> {
+    return intent.id === MEMORY_EDITOR_ID ? this.memory.saveFromEditor(intent.base, intent.body) : this.saveBody(intent);
   }
 
   /** Save the inline editor's body. Throws BodyConflictError and others to the caller, which reports them. */

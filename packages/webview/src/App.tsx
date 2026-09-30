@@ -13,10 +13,11 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BoardView, BrokenView, CardView, ColumnConfig, GroupField, ViewSettings } from '@kanban-bananas/core';
+import { MEMORY_EDITOR_ID, type BoardView, type BrokenView, type CardView, type ColumnConfig, type GroupField, type ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { findColumn, moveCard, moveIntent, type Columns } from './columns.js';
-import { DetailPane } from './DetailPane.js';
+import { DetailPane, MemoryPane } from './DetailPane.js';
+import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
 import { filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
@@ -64,6 +65,7 @@ export function App({ layout }: { layout: Layout }) {
   const [board, setBoard] = useState<BoardView | null>(null);
   const [settings, setSettings] = useState<ViewSettings | null>(null);
   const [assetBase, setAssetBase] = useState('');
+  const [memory, setMemory] = useState<MemorySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noBoard, setNoBoard] = useState<{ featuresDirectory: string; folderOpen: boolean } | null>(null);
   // The page's own state survives hiding; the host's copy survives closing the board and reloading.
@@ -96,6 +98,7 @@ export function App({ layout }: { layout: Layout }) {
         setSettings(m.settings);
         setNoBoard(null);
         setAssetBase(m.assetBase ?? '');
+        setMemory(m.memory ?? null);
         setError(null);
       } else if (m.type === 'error') {
         setError(m.message);
@@ -238,6 +241,9 @@ export function App({ layout }: { layout: Layout }) {
 
   const active = activeId ? cardsById.get(activeId) : undefined;
   const selectedCard = layout === 'panel' && selected ? cardsById.get(selected) : undefined;
+  const memoryOpen = layout === 'panel' && selected === MEMORY_EDITOR_ID && memory !== null;
+  // The session memory opens in the split view like a card; the sidebar has none, so there it opens the file.
+  const openMemory = () => (layout === 'panel' ? setSelected(MEMORY_EDITOR_ID) : vscode.postMessage({ type: 'openMemory' }));
   // Panel: a click opens the split view. Sidebar (narrow): a click opens the file in VS Code's editor.
   const onOpen = (card: CardView) =>
     layout === 'panel' ? setSelected(card.fields.id!) : vscode.postMessage({ type: 'openCard', path: card.path });
@@ -254,7 +260,7 @@ export function App({ layout }: { layout: Layout }) {
         setColumns(hostColumns);
       }}
     >
-      <div className={`workspace ${selectedCard ? 'split' : ''} ${settings.hideScrollbars ? 'no-scrollbars' : ''}`}>
+      <div className={`workspace ${selectedCard || memoryOpen ? 'split' : ''} ${settings.hideScrollbars ? 'no-scrollbars' : ''}`}>
       <div className="board-area">
       <Toolbar
         layout={layout}
@@ -267,6 +273,8 @@ export function App({ layout }: { layout: Layout }) {
       />
       {lanes ? (
         <LaneBoard
+          memory={memory}
+          onOpenMemory={openMemory}
           drag={columnDrag}
           field={grouping!}
           settings={settings}
@@ -288,9 +296,11 @@ export function App({ layout }: { layout: Layout }) {
         {board.broken.length > 0 && (
           <BrokenLane broken={board.broken} collapsed={collapsed.includes('#broken')} onToggle={() => toggle('#broken')} />
         )}
-        {settings.columns.map((col) => (
+        {layout === 'sidebar' && memory && <MemoryWidget memory={memory} onOpen={openMemory} />}
+        {settings.columns.map((col, i) => (
           <Column
             key={col.id}
+            top={i === 0 && layout === 'panel' && memory ? <MemoryWidget memory={memory} onOpen={openMemory} /> : null}
             drag={columnDrag}
             column={col}
             cards={(columns[col.id] ?? []).map((id) => cardsById.get(id)).filter((c): c is CardView => !!c)}
@@ -309,6 +319,18 @@ export function App({ layout }: { layout: Layout }) {
       </div>
       )}
       </div>
+      {memoryOpen && (
+        <MemoryPane
+          file={memory!.file}
+          settings={settings}
+          live={live}
+          onToggleLive={() => setLive(!live)}
+          wide={wide}
+          onToggleWide={() => setWide(!wide)}
+          onClose={() => setSelected(null)}
+          assetBase={assetBase}
+        />
+      )}
       {selectedCard && (
         <DetailPane
           card={selectedCard}
@@ -333,6 +355,8 @@ export function App({ layout }: { layout: Layout }) {
  * right-click menu to rename or delete them; "New lane" adds one.
  */
 function LaneBoard(props: {
+  memory: MemorySummary | null;
+  onOpenMemory: () => void;
   drag: ColumnDrag;
   field: GroupField;
   settings: ViewSettings;
@@ -372,7 +396,7 @@ function LaneBoard(props: {
         </div>
       )}
       <div className="lane-header-row">
-        {settings.columns.map((col) => {
+        {settings.columns.map((col, i) => {
           const collapsed = props.collapsed.includes(col.id);
           return (
             <section
@@ -380,6 +404,7 @@ function LaneBoard(props: {
               className={`column lane-column-head ${collapsed ? 'collapsed' : ''}`}
               style={{ '--column-color': col.color } as React.CSSProperties}
             >
+              {i === 0 && props.memory && <MemoryWidget memory={props.memory} onOpen={props.onOpenMemory} />}
               <ColumnHeader
                 name={col.name}
                 status={col.id}
@@ -586,6 +611,8 @@ function Column(props: {
   cards: CardView[];
   /** All cards in the column, when a filter hides some; shown as "shown / total". */
   total: number | null;
+  /** Shown above the header (the session memory, in the first column). */
+  top?: React.ReactNode;
   drag: ColumnDrag;
   settings: ViewSettings;
   collapsed: boolean;
@@ -601,6 +628,7 @@ function Column(props: {
   const form = props.adding && <NewCardForm status={column.id} onDone={props.onAddDone} />;
   return (
     <section className={`column ${collapsed ? 'collapsed' : ''}`} style={{ '--column-color': column.color } as React.CSSProperties}>
+      {props.top}
       <ColumnHeader
         name={column.name}
         status={column.id}

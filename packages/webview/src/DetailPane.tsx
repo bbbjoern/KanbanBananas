@@ -1,4 +1,4 @@
-import type { CardView, ViewSettings } from '@kanban-bananas/core';
+import { MEMORY_EDITOR_ID, type CardView, type ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
@@ -109,6 +109,64 @@ export function DetailPane(props: {
           live={props.live}
           onEscape={props.onClose}
           images={settings.images ?? { format: 'webp', maxWidth: 0 }}
+          assetBase={props.assetBase}
+        />
+      </ErrorBoundary>
+    </aside>
+  );
+}
+
+/** The session memory in the split view: the whole file, in the same editor as cards. */
+export function MemoryPane(props: {
+  file: string;
+  settings: ViewSettings;
+  live: boolean;
+  onToggleLive: () => void;
+  wide: boolean;
+  onToggleWide: () => void;
+  onClose: () => void;
+  assetBase: string;
+}) {
+  useEffect(() => {
+    vscode.postMessage({ type: 'editorShown', id: MEMORY_EDITOR_ID });
+  }, []);
+  return (
+    <aside className={`detail memory-detail ${props.wide ? 'wide' : ''}`} aria-label="Session memory">
+      <header className="detail-header">
+        <div className="detail-title">
+          <span className="title">Session memory</span>
+          <span className="filename">{props.file}</span>
+        </div>
+        <div className="detail-actions">
+          <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
+            {props.live ? 'Source' : 'Preview'}
+          </button>
+          <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openMemory' })}>
+            Open file
+          </button>
+          <button
+            type="button"
+            className="tool icon"
+            onClick={props.onToggleWide}
+            aria-pressed={props.wide}
+            aria-label={props.wide ? 'Narrower editor' : 'Wider editor'}
+            title={props.wide ? 'Narrower editor' : 'Wider editor'}
+          >
+            {props.wide ? '⇥' : '⇤'}
+          </button>
+          <button type="button" className="tool icon" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
+            ×
+          </button>
+        </div>
+      </header>
+      <p className="memory-hint">Where the work stands, for the next session. Agents update it; you can edit it here too.</p>
+      <ErrorBoundary>
+        <InlineEditor
+          key={MEMORY_EDITOR_ID}
+          id={MEMORY_EDITOR_ID}
+          live={props.live}
+          onEscape={props.onClose}
+          images={props.settings.images ?? { format: 'webp', maxWidth: 0 }}
           assetBase={props.assetBase}
         />
       </ErrorBoundary>

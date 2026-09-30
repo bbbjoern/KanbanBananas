@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 (Preview)
+
+- **Session memory** (Settings → Session memory, off by default): where the work stands, for the next session. The board shows it in the top-left corner (when it was updated and what's next) and opens it in the split view like a card. Agents read it when a session starts and update it at checkpoints with `kanban memory`, as completely as the next session needs (no length limit); a `/session-memory` project command asks the agent to save the current state. The file's location is a setting; *Personal* keeps it out of git for your clone only. Keeps the newest entry (up to 10).
+- **The board reopens after a window reload**, where it was, instead of closing.
+
 ## 1.1.1 (Preview)
 
 - **Clearer settings:** grouped into Board, Cards, New cards, Swimlanes, Images and Agents, in VS Code's Settings and on the extension page.

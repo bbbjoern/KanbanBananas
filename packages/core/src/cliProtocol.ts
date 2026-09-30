@@ -22,7 +22,9 @@ export type CliRequest =
   | { op: 'set'; intent: SetFieldsIntent }
   | { op: 'note'; intent: NoteIntent }
   | { op: 'edit'; intent: EditBodyIntent }
-  | { op: 'create'; intent: CreateIntent };
+  | { op: 'create'; intent: CreateIntent }
+  /** Add an entry to the session memory. */
+  | { op: 'memory'; body: string };
 
 /**
  * How a change was applied:

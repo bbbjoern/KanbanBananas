@@ -59,15 +59,18 @@ async function renderSkill(extensionUri: vscode.Uri, folder: vscode.WorkspaceFol
   const paths = skillPaths(folder);
   const policy = agentMovePolicy();
   const from = (name: string) => join(extensionUri.fsPath, 'dist', 'skill', name);
-  const statuses = readSettings().view.columns.map((c) => c.id);
+  const settings = readSettings();
+  const statuses = settings.view.columns.map((c) => c.id);
+  const memory = settings.sessionMemory.enabled ? { file: settings.sessionMemory.file, keep: settings.sessionMemory.keep } : undefined;
   let skill = (await readFile(from('SKILL.md'), 'utf8'))
     .replaceAll('{{VERSION}}', version)
+    .replaceAll('{{SESSION_MEMORY}}', memory ? sessionMemorySection(memory.file) : '')
     .replaceAll('{{STATUSES}}', statuses.map((s) => `\`${s}\``).join(', '));
   for (const [key, text] of Object.entries(skillPolicyText(policy, '{{KANBAN}}'))) skill = skill.replaceAll(`{{${key}}}`, text);
   skill = skill.replaceAll('{{KANBAN}}', paths.command);
   return new Map([
     ['SKILL.md', Buffer.from(skill)],
-    [SKILL_POLICY_FILE, Buffer.from(JSON.stringify({ agentsMayMoveCards: policy, statuses } satisfies SkillPolicy, null, 2) + '\n')],
+    [SKILL_POLICY_FILE, Buffer.from(JSON.stringify({ agentsMayMoveCards: policy, statuses, ...(memory ? { sessionMemory: memory } : {}) } satisfies SkillPolicy, null, 2) + '\n')],
     ['scripts/kanban.mjs', await readFile(from('kanban.mjs'))],
     [EXECUTABLE, Buffer.from(launcher(process.execPath))],
     ['VERSION', Buffer.from(version + '\n')],
@@ -75,6 +78,63 @@ async function renderSkill(extensionUri: vscode.Uri, folder: vscode.WorkspaceFol
 }
 
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+
+/** SKILL.md section added while session memory is on. */
+function sessionMemorySection(file: string): string {
+  return `## Session memory
+
+This project keeps a **session memory** in \`${file}\`: where the work stands, so a new session (or another agent) can continue after an interruption without the old conversation. The user sees it on the board.
+
+- **At the start of a session**, before anything else, run \`{{KANBAN}} memory\` and continue from its "Next".
+- **Update it** after a plan is agreed, at meaningful checkpoints, when you're blocked or waiting for the user, and whenever the user asks (e.g. \`/session-memory\`). Write it as you go: sessions can end without warning.
+- **Write the whole current state as one entry.** A new entry replaces the previous one, so carry over everything from it that still matters; don't condense it away. There is no length limit: include whatever the next session needs to continue without asking (the state of each thread, decisions and why, what was tried, context that isn't written anywhere else).
+
+\`\`\`sh
+{{KANBAN}} memory --body - <<'MEMORY'
+**Working on:** <card ids, and where each stands>
+**Done since last time:** <what changed>
+**Next:** <the very next step>
+**Open questions:** <for the user, or "none">
+**Decisions:** <with the reasons>
+<anything else the next session needs>
+MEMORY
+\`\`\`
+
+Plans and progress for a card still go on that card (\`note\`); the memory ties the threads together and says what comes next, and may point to cards for their detail. Never edit the memory file directly.
+
+`;
+}
+
+/** The Claude Code slash command /session-memory, installed next to the skill while session memory is on. */
+const SESSION_COMMAND_MARKER = '<!-- kanban-bananas: session-memory command -->';
+function sessionCommand(kanban: string): string {
+  return `---
+description: Save where the work stands to the KanbanBananas session memory
+---
+${SESSION_COMMAND_MARKER}
+Save the current state of this session to the session memory, so the work can continue later without this conversation.
+Use the kanban skill's session memory format (Working on, Done since last time, Next, Open questions, Decisions, and anything else needed).
+Include everything the next session needs to continue without this conversation, at whatever length that takes, and carry over what still
+matters from the previous entry, since the new entry replaces it. Write it with \`${kanban} memory --body -\`, then reply with the entry you saved.
+`;
+}
+
+/** Install or remove .claude/commands/session-memory.md to match the setting (only files we wrote are removed). */
+async function syncSessionCommand(folder: vscode.WorkspaceFolder, command: string): Promise<void> {
+  const base = vscode.workspace.getConfiguration(SECTION).get<string>('skillDirectory') || '.claude/skills';
+  const claudeDir = base.replace(/\/+$/, '').replace(/\/skills$/, '');
+  if (!/(^|\/)\.claude$/.test(claudeDir)) return; // not a Claude Code skills folder: no slash commands there
+  const file = join(folder.uri.fsPath, ...claudeDir.split('/'), 'commands', 'session-memory.md');
+  const enabled = readSettings().sessionMemory.enabled;
+  const existing = await readFile(file, 'utf8').catch(() => null);
+  if (enabled) {
+    if (existing !== null && !existing.includes(SESSION_COMMAND_MARKER)) return; // someone's own command: leave it
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, sessionCommand(command));
+  } else if (existing?.includes(SESSION_COMMAND_MARKER)) {
+    await rm(file);
+  }
+}
 
 /**
  * The skill's launcher script, written at install time (the package ships no
@@ -125,6 +185,7 @@ export async function installSkill(
     manifest.files[rel] = sha(content);
   }
   await chmod(join(paths.dir, ...EXECUTABLE.split('/')), 0o755);
+  await syncSessionCommand(folder, paths.command);
   await writeFile(join(paths.dir, MANIFEST), JSON.stringify(manifest, null, 2) + '\n');
   log.info(`Installed agent skill in ${paths.dir}`);
   if (quiet) return;

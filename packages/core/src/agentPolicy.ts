@@ -16,6 +16,8 @@ export interface SkillPolicy {
   agentsMayMoveCards: AgentMovePolicy;
   /** The board's column ids, in order, so the CLI accepts the project's own columns. */
   statuses?: string[];
+  /** Present when session memory is on: its file (relative to the project root) and how many entries to keep. */
+  sessionMemory?: { file: string; keep: number };
 }
 
 export function isAgentMovePolicy(v: unknown): v is AgentMovePolicy {

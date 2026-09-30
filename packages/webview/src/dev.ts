@@ -26,7 +26,10 @@ if (res.ok) {
   }
   // A fake host for the inline editor: serves bodies and accepts saves.
   (window as { __kanbanDevHost?: (m: { type: string; id?: string; body?: string }) => void }).__kanbanDevHost = (m) => {
-    if (m.type === 'openEditor' && m.id) {
+    if (m.type === 'openEditor' && m.id === '#session-memory') {
+      const body = '# Session memory\n\n## 2026-09-30T10:00:00.000Z\n\n**Working on:** offline-mode-for-the-mobile-app-2026-09-20: queue storage done, replay in progress\n**Done since last time:** queue storage and replay order\n**Next:** Wire the offline queue into the sync service, then test on a flaky connection.\n**Open questions:** none\n**Decisions:** replay oldest first, stop at the first conflict, because later writes may depend on earlier ones.\n';
+      window.postMessage({ type: 'editorBody', id: m.id, path: '.devtool/session-memory.md', body }, '*');
+    } else if (m.type === 'openEditor' && m.id) {
       window.postMessage({ type: 'editorBody', id: m.id, path: `${m.id}.md`, body: bodies[m.id] ?? '' }, '*');
     } else if (m.type === 'saveImage') {
       // Pretend to store it; report what arrived, for the paste test below.
@@ -55,7 +58,16 @@ if (res.ok) {
   if (new URLSearchParams(location.search).has('noBoard')) {
     window.postMessage({ type: 'noBoard', featuresDirectory: '.devtool/features', folderOpen: true }, '*');
   } else {
-    window.postMessage({ type: data.type, board: data.board, settings: data.settings, assetBase: location.origin }, '*');
+    // ?memory: show a sample session memory in the top-left corner.
+    const memory = new URLSearchParams(location.search).has('memory')
+      ? {
+          file: '.devtool/session-memory.md',
+          updated: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+          next: 'Wire the offline queue into the sync service, then test on a flaky connection.',
+          latest: '**Working on:** offline-mode-for-the-mobile-app-2026-09-20\n**Done since last time:** queue storage and replay order\n**Next:** Wire the offline queue into the sync service, then test on a flaky connection.\n**Open questions:** none\n**Decisions:** replay oldest first, stop at the first conflict',
+        }
+      : undefined;
+    window.postMessage({ type: data.type, board: data.board, settings: data.settings, assetBase: location.origin, memory }, '*');
   }
 
   // ?pasteTest: paste a generated screenshot into the open card's editor and report the result.

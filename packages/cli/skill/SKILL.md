@@ -117,7 +117,7 @@ grep -ril "whitespace" .devtool/features   # body text
 BODY
 ```
 
-## Exit codes
+{{SESSION_MEMORY}}## Exit codes
 
 `0` ok · `1` problem (no such card, broken card, `check` found errors) · `2` usage · `3` conflict (the card changed; re-read it) · `4` refused by project policy (`.devtool/kanban.json`).
 

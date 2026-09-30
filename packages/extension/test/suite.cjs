@@ -636,6 +636,68 @@ const tests = {
     await config.update('featuresDirectory', undefined, vscode.ConfigurationTarget.Workspace);
     assert.ok(await waitFor(() => api().state().type === 'state' && api().state().board.cards.length > 1));
   },
+
+  async 'session memory: setting on, agents save through the CLI, board shows it, skill and /session-memory follow'() {
+    const controller = api().controller;
+    const root = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const config = vscode.workspace.getConfiguration('kanbanBananas');
+    const skillDir = path.join(root, '.claude/skills/kanban');
+    const commandFile = path.join(root, '.claude/commands/session-memory.md');
+    await vscode.commands.executeCommand('kanbanBananas.installSkill');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+    // Off: the CLI refuses, no command file, no summary.
+    const off = await kanbanResult(['memory', '--body', 'x'], undefined, path.join(skillDir, 'scripts/kanban'));
+    assert.equal(off.code, 2, off.err);
+    assert.ok(!fs.existsSync(commandFile));
+
+    await config.update('sessionMemory.enabled', true, vscode.ConfigurationTarget.Workspace);
+    await config.update('sessionMemory.keep', 2, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => fs.existsSync(commandFile)), '/session-memory command not installed');
+    assert.ok(await waitFor(() => JSON.parse(fs.readFileSync(path.join(skillDir, 'policy.json'), 'utf8')).sessionMemory?.keep === 2));
+    assert.match(fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8'), /## Session memory/);
+    assert.match(fs.readFileSync(commandFile, 'utf8'), /memory --body -/);
+
+    const launcher = path.join(skillDir, 'scripts/kanban');
+    for (const next of ['one', 'two', 'three']) {
+      const r = await kanbanResult(['memory', '--body', '-', '--json'], `**Working on:** x\n**Next:** step ${next}`, launcher);
+      assert.equal(r.code, 0, r.err);
+      assert.equal(JSON.parse(r.out).handledBy, 'vscode');
+    }
+    const file = fs.readFileSync(path.join(root, '.devtool/session-memory.md'), 'utf8');
+    assert.ok(file.includes('step three') && file.includes('step two') && !file.includes('step one'), file);
+    assert.ok(await waitFor(() => api().state().memory?.next === 'step three'), JSON.stringify(api().state().memory));
+    assert.match((await kanbanResult(['memory'], undefined, launcher)).out, /step three/);
+
+    // Opens in the board's split view like a card, without errors.
+    await vscode.commands.executeCommand('kanbanBananas.card.showOnBoard', { cardId: '#session-memory' });
+    assert.ok(await waitFor(() => controller.shownInEditor.includes('#session-memory') || controller.clientErrors.length > 0, 10000));
+    assert.deepEqual(controller.clientErrors, []);
+    assert.ok(controller.shownInEditor.includes('#session-memory'), 'memory not shown in the split view');
+
+    // Editing it there merges with an entry an agent adds meanwhile.
+    const base = controller.editorDoc('#session-memory').body;
+    assert.match(base, /step three/);
+    await kanbanResult(['memory', '--body', '-'], '**Next:** step four', launcher);
+    await waitFor(() => controller.editorDoc('#session-memory').body.includes('step four'));
+    const saved = await controller.saveEditorDoc({ id: '#session-memory', base, body: base.replace('# Session memory', '# Session memory (edited)') });
+    assert.ok(saved.includes('(edited)') && saved.includes('step four'), saved);
+    assert.match(fs.readFileSync(path.join(root, '.devtool/session-memory.md'), 'utf8'), /\(edited\)[\s\S]*step four/);
+
+    // Personal: listed in .git/info/exclude (this clone only), and taken out again.
+    const exclude = path.join(root, '.git/info/exclude');
+    await config.update('sessionMemory.personal', true, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => fs.existsSync(exclude) && fs.readFileSync(exclude, 'utf8').includes('/.devtool/session-memory.md')));
+    await config.update('sessionMemory.personal', undefined, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => !fs.readFileSync(exclude, 'utf8').includes('/.devtool/session-memory.md')));
+
+    // Off again: the command and the skill section go away.
+    await config.update('sessionMemory.enabled', undefined, vscode.ConfigurationTarget.Workspace);
+    await config.update('sessionMemory.keep', undefined, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => !fs.existsSync(commandFile)), 'command not removed');
+    assert.ok(await waitFor(() => !fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').includes('## Session memory')));
+    assert.equal(api().state().memory, undefined);
+  },
 };
 
 async function expectRejects(promise, pattern) {

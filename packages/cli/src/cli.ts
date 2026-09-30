@@ -1,11 +1,14 @@
-import { relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import {
+  addMemoryEntry,
   EDITABLE_FIELDS,
   findCard,
   idAfter,
   IntentError,
   loadBoard,
   parseCard,
+  parseMemory,
   PatchError,
   planCreate,
   planEditBody,
@@ -29,6 +32,7 @@ import {
   readBoardDir,
   readVersioned,
   resolveTarget,
+  writeAtomic,
 } from '@kanban-bananas/core/node';
 import { sendToExtension } from './client.js';
 import { findProject, UsageError, type Project } from './project.js';
@@ -65,6 +69,8 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
                                           labels=a,b sets; labels=+a,-b adds/removes; key= clears
   kanban edit <id> --body -|text --expect-mtime <mtime>   Replace the whole body
   kanban check                            Integrity scan; exit 1 on problems
+  kanban memory [--all]                   Show the session memory (latest entry)
+  kanban memory --body -|text             Save the current state of the work as the newest entry
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -111,6 +117,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
         return await ctx.set(need(rest[0], 'set <id> key=value...'), rest.slice(1));
       case 'edit':
         return await ctx.edit(need(rest[0], 'edit <id> --body - --expect-mtime <t>'));
+      case 'memory':
+        return await ctx.memory();
       default:
         throw new UsageError(`Unknown command "${command}".`);
     }
@@ -340,6 +348,47 @@ class Context {
     return this.write({ op: 'edit', intent }, id, () => planEditBody(board, intent, this.now()));
   }
 
+  /** Show the session memory, or add an entry to it (`--body`). */
+  async memory(): Promise<number> {
+    const config = this.io.skillPolicy?.sessionMemory;
+    if (!config) {
+      throw new UsageError('Session memory is off for this project. The user can turn it on in the KanbanBananas settings.');
+    }
+    const file = join(this.project.root, config.file);
+    const body = await this.body();
+    if (body === undefined) {
+      const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+      const entries = parseMemory(text);
+      const shown = this.args.flags.all === true ? entries : entries.slice(0, 1);
+      this.out(
+        { file: this.display2(file), entries: shown },
+        shown.length ? shown.map((e) => `## ${e.at}\n\n${e.body}`).join('\n\n') : '(no session memory yet)',
+      );
+      return EXIT.ok;
+    }
+    const viaExtension = await this.viaExtension({ op: 'memory', body });
+    // The extension reports the memory file relative to the project root.
+    if (viaExtension) return this.reportWrite(viaExtension, 'vscode', this.display2(join(this.project.root, viaExtension.path)));
+    // No VS Code: read, add, write atomically; retry if it changed in between.
+    for (let attempt = 1; ; attempt++) {
+      const exists = existsSync(file);
+      const current = exists ? await readVersioned(file) : null;
+      const next = addMemoryEntry(current?.text ?? '', body, this.now(), config.keep);
+      try {
+        mkdirSync(dirname(file), { recursive: true });
+        const version = await writeAtomic(file, next, current?.version ?? null);
+        return this.reportWrite({ path: config.file, mtimeMs: version.mtimeMs, route: 'disk' }, 'cli', this.display2(file));
+      } catch (e) {
+        if (!(e instanceof ConflictError) || attempt >= 3) throw e;
+      }
+    }
+  }
+
+  /** A path outside the features directory, relative to where the user is. */
+  private display2(abs: string): string {
+    return relative(this.io.cwd, abs) || abs;
+  }
+
   /** Send to the extension if it's running; otherwise plan and write the file here. */
   private async write(request: CliRequest, id: string, makePlan: () => Plan): Promise<number> {
     const viaExtension = await this.viaExtension(request);
@@ -364,8 +413,8 @@ class Context {
    * Every write says how it was applied (`route`) and who applied it
    * (`handledBy`: the running VS Code extension, or this CLI directly).
    */
-  private reportWrite(result: CliResult, handledBy: 'vscode' | 'cli'): number {
-    const path = this.display(result.path);
+  private reportWrite(result: CliResult, handledBy: 'vscode' | 'cli', displayPath?: string): number {
+    const path = displayPath ?? this.display(result.path);
     const lines = [path, `mtime: ${result.mtimeMs}`, `route: ${result.route} (${handledBy === 'vscode' ? 'applied by VS Code' : 'written by the CLI'})`];
     if (result.route === 'editor-unsaved') {
       lines.push('note: the card has unsaved edits in an editor; your change is in that editor and reaches the file when the user saves.');
@@ -443,7 +492,7 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version']);
+const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all']);
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];
