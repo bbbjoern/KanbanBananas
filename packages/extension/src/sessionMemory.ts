@@ -1,7 +1,7 @@
-import { addMemoryEntry, BodyConflictError, memoryNext, mergeText, parseMemory } from '@kanban-bananas/core';
+import { BodyConflictError, droppedNote, memoryNext, mergeText, parseMemory, updateMemory } from '@kanban-bananas/core';
 import { ConflictError, readVersioned, writeAtomic, type WriteResult } from '@kanban-bananas/core/node';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
@@ -77,9 +77,14 @@ export class SessionMemory implements vscode.Disposable {
     if (!uri) return;
     const text = await this.currentText(uri);
     this.textCache = (text ?? '').replace(/\r\n/g, '\n');
-    const latest = parseMemory(text ?? '')[0];
+    const latest = parseMemory(text ?? '', await this.mtime(uri))[0];
     this.summaryCache = { file: this.config().file, updated: latest?.at ?? null, next: memoryNext(latest), latest: latest?.body ?? null };
     this.changed.fire();
+  }
+
+  /** The file's mtime as ISO, to date hand-written text (see parseMemory). */
+  private async mtime(uri: vscode.Uri): Promise<string | undefined> {
+    return stat(uri.fsPath).then((s) => s.mtime.toISOString(), () => undefined);
   }
 
   private async currentText(uri: vscode.Uri): Promise<string | null> {
@@ -95,7 +100,18 @@ export class SessionMemory implements vscode.Disposable {
 
   /** Add an entry (from the CLI or a command). One write at a time. */
   add(body: string): Promise<WriteResult> {
-    return this.enqueue(() => this.write((current) => addMemoryEntry(current, body, new Date(), this.config().keep)));
+    return this.enqueue(async () => {
+      const uri = this.uri();
+      const undatedAt = uri ? await this.mtime(uri) : undefined;
+      let note: string | undefined;
+      const result = await this.write((current) => {
+        const update = updateMemory(current, body, new Date(), this.config().keep, undatedAt);
+        note = droppedNote(update.dropped);
+        return update.text;
+      });
+      if (note) log.info(`Session memory: ${note}`);
+      return note ? { ...result, note } : result;
+    });
   }
 
   /**

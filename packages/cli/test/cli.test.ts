@@ -88,6 +88,35 @@ describe('session memory', () => {
     expect(r.stderr).toMatch(/Session memory is off/);
   });
 
+  it('field report: hand-written text is shown, kept with keep > 1, and reported when replaced', async () => {
+    const file = join(project, '.devtool/session-memory.md');
+    writeFileSync(file, 'Status copied from a card:\n- parser done\n- next: UI\n');
+    const read = await mem(['memory']);
+    expect(read.stdout).toContain('written by hand');
+    expect(read.stdout).toContain('parser done');
+
+    const keep2 = { ...policy, sessionMemory: { ...policy.sessionMemory, keep: 2 } };
+    let out = '';
+    await run(['memory', '--body', 'new state'], {
+      cwd: project, env: { KANBAN_NOW: NOW }, stdout: (x) => void (out += x), stderr: () => {}, readStdin: async () => '', skillPolicy: keep2,
+    });
+    expect(readFileSync(file, 'utf8')).toContain('parser done');
+    expect(readFileSync(file, 'utf8')).toContain('new state');
+
+    writeFileSync(file, 'Hand-written again\n');
+    const replaced = await mem(['memory', '--body', 'newest', '--json']);
+    expect(JSON.parse(replaced.stdout).note).toMatch(/written by hand/);
+  });
+
+  it('--from-card saves a card as the newest entry and leaves the card alone', async () => {
+    const card = readFileSync(join(features, 'add-login-page-2026-09-01.md'), 'utf8');
+    expect((await mem(['memory', '--from-card', 'add-login-page-2026-09-01'])).code).toBe(EXIT.ok);
+    const file = readFileSync(join(project, '.devtool/session-memory.md'), 'utf8');
+    expect(file).toContain('From card `add-login-page-2026-09-01`');
+    expect(file).toContain('# Add login page');
+    expect(readFileSync(join(features, 'add-login-page-2026-09-01.md'), 'utf8')).toBe(card);
+  });
+
   it('saves the newest entry, keeps only the limit, and shows it', async () => {
     expect((await mem(['memory'])).stdout).toMatch(/no session memory yet/);
     expect((await mem(['memory', '--body', '-'], '**Next:** first')).code).toBe(EXIT.ok);

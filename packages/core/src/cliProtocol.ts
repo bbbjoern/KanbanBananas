@@ -39,6 +39,8 @@ export interface CliResult {
   path: string;
   mtimeMs: number;
   route: WriteRoute;
+  /** Something the caller should know, e.g. which session memory entries were dropped. */
+  note?: string;
 }
 
 export type CliErrorCode = 'conflict' | 'invalid' | 'error';

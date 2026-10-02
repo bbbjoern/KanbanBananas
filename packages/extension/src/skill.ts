@@ -102,6 +102,9 @@ MEMORY
 
 Plans and progress for a card still go on that card (\`note\`); the memory ties the threads together and says what comes next, and may point to cards for their detail. Never edit the memory file directly.
 
+- To start the memory from an existing status card: \`{{KANBAN}} memory --from-card <id>\` (the card stays as it is).
+- If \`memory\` shows an entry "written by hand", the user wrote it: treat it like any entry and carry over what matters. If a write reports that it replaced hand-written text, check that nothing important was lost.
+
 `;
 }
 

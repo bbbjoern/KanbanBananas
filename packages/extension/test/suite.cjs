@@ -684,6 +684,14 @@ const tests = {
     assert.ok(saved.includes('(edited)') && saved.includes('step four'), saved);
     assert.match(fs.readFileSync(path.join(root, '.devtool/session-memory.md'), 'utf8'), /\(edited\)[\s\S]*step four/);
 
+    // Hand-written text in the file is shown and carried, also through the extension.
+    fs.writeFileSync(path.join(root, '.devtool/session-memory.md'), 'Hand-written status: halfway through the parser.\n');
+    assert.match((await kanbanResult(['memory'], undefined, launcher)).out, /written by hand[\s\S]*halfway through the parser/);
+    const carried = await kanbanResult(['memory', '--body', '-', '--json'], '**Next:** finish the parser', launcher);
+    assert.equal(JSON.parse(carried.out).handledBy, 'vscode');
+    const after = fs.readFileSync(path.join(root, '.devtool/session-memory.md'), 'utf8');
+    assert.ok(after.includes('halfway through the parser') && after.includes('finish the parser'), after);
+
     // Personal: listed in .git/info/exclude (this clone only), and taken out again.
     const exclude = path.join(root, '.git/info/exclude');
     await config.update('sessionMemory.personal', true, vscode.ConfigurationTarget.Workspace);

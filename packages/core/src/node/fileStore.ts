@@ -19,6 +19,8 @@ export interface WriteResult {
   mtimeMs: number;
   /** How the change was applied; see WriteRoute. */
   route: WriteRoute;
+  /** Something the caller should know (e.g. dropped session memory entries). */
+  note?: string;
 }
 
 // Keep a BOM if there is one, so text matches the bytes on disk.

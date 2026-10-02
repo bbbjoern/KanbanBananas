@@ -7,3 +7,5 @@ packages/core/test/corpus/features/
 # Dev-server snapshot of a real board (packages/extension/scripts/dev-board.mjs)
 packages/webview/public/dev-board.json
 packages/extension/*.vsix
+# Running extension's socket record (KanbanBananas board in this repo)
+.devtool/.kanban.sock

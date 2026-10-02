@@ -1,13 +1,14 @@
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import {
-  addMemoryEntry,
+  droppedNote,
   EDITABLE_FIELDS,
   findCard,
   idAfter,
   IntentError,
   loadBoard,
   parseCard,
+  memoryFromCard,
   parseMemory,
   PatchError,
   planCreate,
@@ -16,6 +17,7 @@ import {
   planNote,
   planSetFields,
   policyRefusal,
+  updateMemory,
   type Board,
   type BoardCard,
   type CliRequest,
@@ -71,6 +73,7 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban check                            Integrity scan; exit 1 on problems
   kanban memory [--all]                   Show the session memory (latest entry)
   kanban memory --body -|text             Save the current state of the work as the newest entry
+  kanban memory --from-card <id>          Save a card's text as the newest entry (the card stays)
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -355,14 +358,26 @@ class Context {
       throw new UsageError('Session memory is off for this project. The user can turn it on in the KanbanBananas settings.');
     }
     const file = join(this.project.root, config.file);
-    const body = await this.body();
+    const mtime = () => (existsSync(file) ? statSync(file).mtime.toISOString() : undefined);
+    const fromCard = str(this.args.flags['from-card']);
+    let body = await this.body();
+    if (fromCard) {
+      if (body !== undefined) throw new UsageError('Use --body or --from-card, not both.');
+      const board = await this.board();
+      const id = this.resolveId(board, fromCard);
+      const card = findCard(board, id);
+      const parsed = parseCard((await readVersioned(join(this.project.features, card.path))).text);
+      if (!parsed.ok) throw new Error(`${card.path} no longer parses.`);
+      body = memoryFromCard(id, parsed.card.source.body);
+    }
     if (body === undefined) {
       const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
-      const entries = parseMemory(text);
+      const entries = parseMemory(text, mtime());
       const shown = this.args.flags.all === true ? entries : entries.slice(0, 1);
+      const label = (e: (typeof entries)[number]) => (e.handWritten ? `${e.at} (written by hand, no entry heading)` : e.at);
       this.out(
         { file: this.display2(file), entries: shown },
-        shown.length ? shown.map((e) => `## ${e.at}\n\n${e.body}`).join('\n\n') : '(no session memory yet)',
+        shown.length ? shown.map((e) => `## ${label(e)}\n\n${e.body}`).join('\n\n') : '(no session memory yet)',
       );
       return EXIT.ok;
     }
@@ -373,11 +388,12 @@ class Context {
     for (let attempt = 1; ; attempt++) {
       const exists = existsSync(file);
       const current = exists ? await readVersioned(file) : null;
-      const next = addMemoryEntry(current?.text ?? '', body, this.now(), config.keep);
+      const update = updateMemory(current?.text ?? '', body, this.now(), config.keep, mtime());
       try {
         mkdirSync(dirname(file), { recursive: true });
-        const version = await writeAtomic(file, next, current?.version ?? null);
-        return this.reportWrite({ path: config.file, mtimeMs: version.mtimeMs, route: 'disk' }, 'cli', this.display2(file));
+        const version = await writeAtomic(file, update.text, current?.version ?? null);
+        const note = droppedNote(update.dropped);
+        return this.reportWrite({ path: config.file, mtimeMs: version.mtimeMs, route: 'disk', ...(note ? { note } : {}) }, 'cli', this.display2(file));
       } catch (e) {
         if (!(e instanceof ConflictError) || attempt >= 3) throw e;
       }
@@ -416,11 +432,12 @@ class Context {
   private reportWrite(result: CliResult, handledBy: 'vscode' | 'cli', displayPath?: string): number {
     const path = displayPath ?? this.display(result.path);
     const lines = [path, `mtime: ${result.mtimeMs}`, `route: ${result.route} (${handledBy === 'vscode' ? 'applied by VS Code' : 'written by the CLI'})`];
+    if (result.note) lines.push(`note: ${result.note}`);
     if (result.route === 'editor-unsaved') {
       lines.push('note: the card has unsaved edits in an editor; your change is in that editor and reaches the file when the user saves.');
     }
     this.out(
-      { path, mtimeMs: result.mtimeMs, route: result.route, handledBy, unsaved: result.route === 'editor-unsaved' },
+      { path, mtimeMs: result.mtimeMs, route: result.route, handledBy, unsaved: result.route === 'editor-unsaved', ...(result.note ? { note: result.note } : {}) },
       lines.join('\n'),
     );
     return EXIT.ok;
