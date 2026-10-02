@@ -177,6 +177,8 @@ The CLI gets its own package because agents edit cards too; the old extension's 
 - **Lanes:** Group by Epic, Assignee, Priority or Lane. Configured lanes (`kanbanBananas.lanes`, workspace settings) come first and show when empty; used values follow; "none" is last. Right-click a lane to rename or delete it (changes the field on its cards); "+ New lane" adds one to settings.
 - **Skill auto-update:** the extension compares the installed skill with what it would write. Older and untouched → updated automatically (notice afterwards); edited by hand → asks ("Update Anyway"); newer (e.g. a teammate's extension) → left alone. A `.manifest.json` in the skill folder records file hashes to tell hand edits apart. `kanbanBananas.autoUpdateSkill` turns it off.
 
+**Releases so far:** 1.0.0 (2026-09-27, M0–M6), 1.1.0 (images, first-run setup), 1.1.1 (settings sections, extension page), 1.2.0 (session memory, board restored after reload). See `packages/extension/CHANGELOG.md`.
+
 **Images (1.1.0, 2026-09-29):** pasted or dropped images are saved per card under `kanbanBananas.images.folder` (default `.devtool/assets/<card-id>/`) and linked root-relative (`/.devtool/assets/…`), so links survive moves into `done/` without touching card bodies. The board's editor encodes lossless WebP (keeping the pasted PNG when that's smaller) and can scale down; VS Code's own editor gets the same storage through a paste/drop provider for card files (keeps the pasted format). Deleting a card deletes the images only it links to (active and archived cards are checked); "Clean Up Unused Images" lists orphans. Git LFS is an explicit command, not a setting.
 
 **Terminology (settled 2026-09-27):** *columns* are the vertical status stages; *swimlanes* are the optional horizontal grouping by a field. Earlier notes that say "lanes" mean swimlanes.
@@ -207,8 +209,8 @@ The CLI and skill sit at M2b, right after frontmatter writes, because agents wri
 
 ## Backlog (ideas, not scheduled)
 
-- ~~Board closes on window reload~~: done (webview panel serializer), unreleased.
-- ~~Session memory~~: done, unreleased. Settings `kanbanBananas.sessionMemory.*` (enabled, file, keep 1–10, personal → `.git/info/exclude`); `kanban memory` in the CLI (via the extension when running); board widget above the first column; skill section and `.claude/commands/session-memory.md` while enabled.
+- ~~Board closes on window reload~~: done (webview panel serializer), released in 1.2.0.
+- ~~Session memory~~: done, released in 1.2.0; opens in the split view like a card, entries have no length limit. Settings `kanbanBananas.sessionMemory.*` (enabled, file, keep 1–10, personal → `.git/info/exclude`); `kanban memory` in the CLI (via the extension when running); board widget above the first column; skill section and `.claude/commands/session-memory.md` while enabled.
 
 - **Column info (2026-09-29):** an optional description per column saying what it's for, for columns whose purpose isn't obvious. Stored as `description` on the column in `kanbanBananas.columns`. Edited via right-click → *Edit Column Info…*; shown as a small ⓘ after the column name (only when set) with the text on hover, and as a grey line under the name in the vertical layout. The agent skill lists the descriptions next to the statuses, so agents know which column a card belongs in.
 

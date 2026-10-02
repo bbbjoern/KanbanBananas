@@ -33,20 +33,23 @@ It started as a replacement for an extension that corrupted cards: two parts of 
 
 - Drag and drop between and within columns; add, rename, reorder, recolour and delete columns on the board.
 - Split view with a live-preview markdown editor (CodeMirror 6) that saves automatically, never rewrites markdown you didn't touch, and merges outside changes into what you're typing.
+- **Screenshots in cards:** paste an image into a card (or drag an image file onto it). It's stored per card in `.devtool/assets/<card-id>/` as lossless WebP, linked from the project root so the link survives moving the card to Done, and shown in the editor. Deleting a card deletes its images unless another card uses them.
 - Full-text search and filters (priority, assignee, label, due date).
 - Swimlanes by epic, assignee, priority or a free `lane` field.
 - Archive, delete, bulk-move a column, rename or delete labels across cards, filename patterns with a rename migration.
 - A field header above cards opened in VS Code's own editor.
 - `kanban` CLI and an agent skill, so agents (e.g. Claude Code) update cards through the same safe path, with a configurable policy for how far they may move cards.
+- **Session memory** (opt-in): where the work stands, shown in the board's top-left corner and opened like a card. Agents read it when a session starts and update it at checkpoints; in Claude Code, `/session-memory` asks the agent to save the current state. Helps when a session ends unexpectedly (laptop sleeps, SSH drops).
+- First run: in a project without a board, the board offers to create one or to use an existing folder of cards. The board reopens after a window reload, with your view as you left it.
 
 ![Split view](packages/extension/media/screenshots/split-view.png)
 
 ## Install
 
 - **VS Code:** install **KanbanBananas** from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=Hypertxtorg.kanban-bananas), or from a `.vsix`: Extensions view → ⋯ → *Install from VSIX…*
-- **Cursor and other VS Code forks:** install from a `.vsix` (Open VSX listing to follow).
+- **Cursor and other VS Code forks:** install from a `.vsix` (Open VSX listing to follow). Releases are tagged on GitHub (`v1.2.0`, …); build the `.vsix` with `npm run package -w kanban-bananas`.
 
-Then put cards in `.devtool/features/` (done cards in `.devtool/features/done/`) and run **KanbanBananas: Open Board**. The [extension README](packages/extension/README.md) has the card format and settings.
+Then run **KanbanBananas: Open Board** (or click the banana in the activity bar) and choose **Create board**, or **Use an existing folder…** for cards you already have. The [extension README](packages/extension/README.md) has the card format and settings; the [changelog](packages/extension/CHANGELOG.md) lists what changed in each version.
 
 ## The `kanban` CLI
 
@@ -60,6 +63,8 @@ NOTE
 kanban move <id> review
 kanban set <id> priority=high labels=+ui
 kanban check                                # integrity scan, non-zero exit on problems
+kanban memory                               # session memory: show the latest entry (when turned on)
+kanban memory --body - < status.md          # …or save the current state as the newest entry
 ```
 
 While VS Code is running, CLI changes go through the extension (including into open editors); otherwise the CLI writes atomically itself. Every change reports its route: `disk`, `editor-saved` or `editor-unsaved`.
