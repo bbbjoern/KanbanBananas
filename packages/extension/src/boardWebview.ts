@@ -120,6 +120,11 @@ export function attachBoard(
           );
           break;
         }
+        case 'copyPath':
+          void controller.copyCardPath(m.path).then((text) => {
+            if (text) post({ type: 'pathCopied', path: m.path, text });
+          });
+          break;
         case 'openSettings':
           // The id is publisher.name; look it up rather than hard-coding the publisher.
           void vscode.commands.executeCommand(

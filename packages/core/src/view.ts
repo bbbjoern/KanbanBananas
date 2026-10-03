@@ -99,6 +99,8 @@ export type HostMessage =
   | { type: 'noBoard'; featuresDirectory: string; folderOpen: boolean }
   /** The inline editor's card: its body when opened, and again whenever someone else changes it. */
   | { type: 'editorBody'; id: string; path: string; body: string }
+  /** A card's path was copied to the clipboard (as `text`). */
+  | { type: 'pathCopied'; path: string; text: string }
   /** A pasted image was saved; `link` is what the card should reference. */
   | { type: 'imageSaved'; requestId: string; link: string }
   | { type: 'imageError'; requestId: string; message: string }
@@ -142,6 +144,8 @@ export type WebviewMessage =
   | { type: 'setupBoard'; action: 'create' | 'choose' | 'openFolder' }
   /** Open the session memory file in VS Code's editor. */
   | { type: 'openMemory' }
+  /** Copy a card's path (relative to the project), e.g. to paste into an agent's chat. */
+  | { type: 'copyPath'; path: string }
   /** Open VS Code's Settings at this extension's settings. */
   | { type: 'openSettings' }
   /** View choices (lanes, wide editor, collapsed columns, filters…) to keep across sessions. Opaque to the host. */

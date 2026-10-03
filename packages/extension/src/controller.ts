@@ -320,6 +320,20 @@ export class BoardController implements vscode.Disposable {
     return card?.card.fields.id ?? undefined;
   }
 
+  /**
+   * Copy a card's path, relative to the project, to the clipboard: as an `@`
+   * mention or plain, per the setting. Returns what was copied.
+   */
+  async copyCardPath(path: string): Promise<string | undefined> {
+    if (!this.source?.has(path)) return undefined;
+    const rel = vscode.workspace.asRelativePath(this.source.uriFor(path), false);
+    const format = vscode.workspace.getConfiguration(SECTION).get<string>('copyPathFormat', 'mention');
+    const text = format === 'path' ? rel : `@${rel}`;
+    await vscode.env.clipboard.writeText(text);
+    vscode.window.setStatusBarMessage(`KanbanBananas: copied ${text}`, 3000);
+    return text;
+  }
+
   uriFor(path: string): vscode.Uri | undefined {
     return this.source?.uriFor(path);
   }

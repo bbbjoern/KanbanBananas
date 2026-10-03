@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 (Preview)
+
+- **Copy a card's path** to share it with an agent: a small button on each card (on hover), in the split view's header, and *Copy Card Path* in the card's right-click menu. Copies `@.devtool/features/<card>.md` by default, which attaches the file when pasted into an agent's chat; the *Copy path as* setting switches to the plain path.
+
 ## 1.2.1 (Preview)
 
 - **Fix: hand-written text in the session memory was lost.** Text without a dated entry heading (e.g. pasted from a card) wasn't shown by `kanban memory`, and the next write dropped it without warning. It's now shown as an entry (dated by the file), kept like any other entry, and a write that replaces it says so.

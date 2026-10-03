@@ -16,6 +16,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { MEMORY_EDITOR_ID, type BoardView, type BrokenView, type CardView, type ColumnConfig, type GroupField, type ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { findColumn, moveCard, moveIntent, type Columns } from './columns.js';
+import { CopyPath } from './CopyPath.js';
 import { DetailPane, MemoryPane } from './DetailPane.js';
 import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
@@ -922,6 +923,7 @@ function CardBody(props: {
     >
       <div className="title-row">
         <span className="title">{card.title ?? card.filename}</span>
+        {!dragging && <CopyPath path={card.path} />}
         {card.warnings.length > 0 && (
           <span className="warning" title={card.warnings.join('\n')} aria-label="Warning">
             !

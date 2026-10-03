@@ -706,6 +706,17 @@ const tests = {
     assert.ok(await waitFor(() => !fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').includes('## Session memory')));
     assert.equal(api().state().memory, undefined);
   },
+
+  async 'copy a card path for an agent: @mention by default, plain by setting'() {
+    const card = api().state().board.cards[0];
+    await vscode.commands.executeCommand('kanbanBananas.card.copyPath', { cardId: card.fields.id });
+    assert.equal(await vscode.env.clipboard.readText(), `@.devtool/features/${card.path}`);
+    const config = vscode.workspace.getConfiguration('kanbanBananas');
+    await config.update('copyPathFormat', 'path', vscode.ConfigurationTarget.Workspace);
+    await vscode.commands.executeCommand('kanbanBananas.card.copyPath', { cardId: card.fields.id });
+    assert.equal(await vscode.env.clipboard.readText(), `.devtool/features/${card.path}`);
+    await config.update('copyPathFormat', undefined, vscode.ConfigurationTarget.Workspace);
+  },
 };
 
 async function expectRejects(promise, pattern) {

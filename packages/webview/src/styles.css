@@ -1143,3 +1143,43 @@ button {
 .memory-open {
   border: 1px solid var(--card-border-hover);
 }
+
+/* Copy a card's path */
+
+.copy-path {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.card:hover .copy-path,
+.card:focus-within .copy-path,
+.copy-path:focus-visible,
+.copy-path.copied,
+.copy-path.with-label {
+  opacity: 1;
+}
+
+.copy-path:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.copy-path.copied {
+  color: var(--accent);
+}
+
+.copy-path.with-label {
+  padding: 3px 8px;
+  font-size: 12px;
+}

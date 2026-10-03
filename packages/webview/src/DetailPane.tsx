@@ -1,5 +1,6 @@
 import { MEMORY_EDITOR_ID, type CardView, type ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useState } from 'react';
+import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
 import { vscode } from './vscode.js';
@@ -40,6 +41,7 @@ export function DetailPane(props: {
           <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
             {props.live ? 'Source' : 'Preview'}
           </button>
+          <CopyPath path={card.path} label="Copy path" />
           <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openCard', path: card.path })}>
             Open file
           </button>

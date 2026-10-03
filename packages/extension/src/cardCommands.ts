@@ -25,6 +25,13 @@ export function registerCardCommands(controller: BoardController): vscode.Dispos
     ),
 
     vscode.commands.registerCommand(
+      'kanbanBananas.card.copyPath',
+      withCard(async (card) => {
+        await controller.copyCardPath(card.path);
+      }),
+    ),
+
+    vscode.commands.registerCommand(
       'kanbanBananas.card.setPriority',
       withCard(async (card) => {
         const current = card.card.fields.priority;

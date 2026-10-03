@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a command line so coding agents can update cards safely.",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "publisher": "Hypertxtorg",
   "license": "MIT",
   "repository": {
@@ -195,6 +195,11 @@
         "command": "kanbanBananas.createBoard",
         "title": "Create Board\u2026",
         "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.card.copyPath",
+        "title": "Copy Card Path",
+        "category": "KanbanBananas"
       }
     ],
     "viewsContainers": {
@@ -318,6 +323,11 @@
           "command": "kanbanBananas.column.delete",
           "when": "webviewSection == 'column'",
           "group": "2_delete@1"
+        },
+        {
+          "command": "kanbanBananas.card.copyPath",
+          "when": "webviewSection == 'card'",
+          "group": "1_open@2"
         }
       ],
       "commandPalette": [
@@ -395,6 +405,10 @@
         },
         {
           "command": "kanbanBananas.column.delete",
+          "when": "false"
+        },
+        {
+          "command": "kanbanBananas.card.copyPath",
           "when": "false"
         }
       ]
@@ -519,6 +533,19 @@
             "type": "boolean",
             "default": false,
             "description": "Show the card's filename on cards."
+          },
+          "kanbanBananas.copyPathFormat": {
+            "type": "string",
+            "enum": [
+              "mention",
+              "path"
+            ],
+            "default": "mention",
+            "enumDescriptions": [
+              "`@.devtool/features/card.md`: in Claude Code and similar chats, `@path` attaches the file to the message.",
+              "`.devtool/features/card.md`: the plain path."
+            ],
+            "markdownDescription": "What the copy button on a card copies: the card's path relative to the project, as an `@` mention (to paste into an agent's chat) or plain."
           }
         }
       },
