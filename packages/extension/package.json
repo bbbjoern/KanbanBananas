@@ -2,7 +2,7 @@
   "name": "kanban-bananas",
   "displayName": "KanbanBananas",
   "description": "A kanban board for the markdown cards in your repo: safe writes that never corrupt cards, a live-preview editor, swimlanes, and a command line so coding agents can update cards safely.",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "publisher": "Hypertxtorg",
   "license": "MIT",
   "repository": {
