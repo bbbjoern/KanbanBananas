@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import * as vscode from 'vscode';
 import type { CardStore } from './cardStore.js';
+import { log } from './log.js';
 import type { Settings } from './settings.js';
 
 /**
@@ -66,6 +67,9 @@ export class CliServer implements vscode.Disposable {
     socket.on('error', () => socket.destroy());
   }
 
+  /** Answers by request id, so a repeated request is applied once (kept a few minutes). */
+  private readonly answers = new Map<string, { at: number; answer: Promise<CliResponse> }>();
+
   private async respond(line: string): Promise<CliResponse> {
     let request: CliRequest;
     try {
@@ -73,6 +77,26 @@ export class CliServer implements vscode.Disposable {
     } catch {
       return { ok: false, code: 'invalid', error: 'Request is not JSON.' };
     }
+    const now = Date.now();
+    for (const [id, a] of this.answers) if (now - a.at > 5 * 60_000) this.answers.delete(id);
+    const id = request.requestId;
+    const known = id ? this.answers.get(id) : undefined;
+    if (known) {
+      log.info(`CLI ${request.op} ${id}: repeated request, answering with the first one's result`);
+      return known.answer;
+    }
+    const started = Date.now();
+    const answer = this.handleRequest(request).then((r) => {
+      const ms = Date.now() - started;
+      const result = r.ok ? (r.result ? `${r.result.route} ${r.result.path}` : 'ok') : `${r.code}: ${r.error}`;
+      (ms > 5000 ? log.warn : log.info).call(log, `CLI ${request.op}${id ? ` ${id.slice(0, 8)}` : ''}: ${result} (${ms} ms)`);
+      return r;
+    });
+    if (id) this.answers.set(id, { at: now, answer });
+    return answer;
+  }
+
+  private async handleRequest(request: CliRequest): Promise<CliResponse> {
     try {
       const store = this.store;
       switch (request.op) {

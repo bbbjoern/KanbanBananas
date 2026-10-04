@@ -15,8 +15,12 @@ export interface SocketRecord {
   version: string;
 }
 
-/** `create` from the CLI leaves `top` and `priority` to the extension's settings when not given. */
-export type CliRequest =
+/**
+ * `create` from the CLI leaves `top` and `priority` to the extension's settings when not given.
+ * `requestId` makes a request safe to repeat: the extension applies it once and answers every
+ * repeat with that result (waiting for it if it's still running).
+ */
+export type CliRequest = { requestId?: string } & (
   | { op: 'ping' }
   | { op: 'move'; intent: MoveIntent }
   | { op: 'set'; intent: SetFieldsIntent }
@@ -24,7 +28,8 @@ export type CliRequest =
   | { op: 'edit'; intent: EditBodyIntent }
   | { op: 'create'; intent: CreateIntent }
   /** Add an entry to the session memory. */
-  | { op: 'memory'; body: string };
+  | { op: 'memory'; body: string }
+);
 
 /**
  * How a change was applied:

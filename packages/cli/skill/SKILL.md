@@ -1,6 +1,6 @@
 ---
 name: kanban
-description: Read and change the project's kanban cards (.devtool/features) with the `kanban` CLI. Use for anything about the board, a card, a ticket or feature card, adding a done note, moving a card, creating a card from a bug report, or finding a card by topic. Never edit card files directly.
+description: Read and change the project's kanban cards (.devtool/features) with the kanban CLI, run by its full path `{{KANBAN}}` (there is no `kanban` command on the PATH). Use for anything about the board, a card, a ticket or feature card, adding a done note, moving a card, creating a card from a bug report, finding a card by topic, or the session memory. Never edit card files directly.
 ---
 
 <!-- Installed by the KanbanBananas VS Code extension, version {{VERSION}}. Don't edit: "KanbanBananas: Install / Update Agent Skill" overwrites this folder. -->
@@ -17,11 +17,14 @@ Run it as:
 {{KANBAN}} <command> [--json]
 ```
 
+Always by this full path, from the project root. There is no plain `kanban` command on the PATH, so don't shorten it (also not in notes or memory you keep for later).
+
 ## Hard rules
 
 1. **Never create, edit, move, rename or delete files under `.devtool/features/`** with Write, Edit, `sed`, `mv`, `rm` or any other tool. Only use the CLI. Reading cards with `cat`, `grep` or Read is fine.
 2. **Always run `{{KANBAN}} find <id>` right before acting on a card**, and use the path it prints. Cards move (for example into `done/`); never reuse a path from earlier in the session.
 3. **If the CLI reports a conflict, a broken card or a refusal, stop and tell the user.** Don't repair card files by hand, and don't retry with `--force` unless the user says so.
+   If it says VS Code didn't answer, the change may still be applied: check with `{{KANBAN}} show <id>` before repeating it.
 4. {{MOVE_RULE}}
 
 ## Commands

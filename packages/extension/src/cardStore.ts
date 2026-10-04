@@ -33,6 +33,7 @@ import {
 import { readFile, stat } from 'node:fs/promises';
 import * as vscode from 'vscode';
 import type { BoardSource } from './boardSource.js';
+import { log } from './log.js';
 
 const MAX_ATTEMPTS = 3;
 
@@ -211,7 +212,11 @@ export class CardStore {
     if (after.getText() !== next) {
       throw new Error(`Edit to ${plan.targetPath ?? plan.path} did not produce the expected text. Check the file.`);
     }
-    if (!wasDirty && !(await after.save())) {
+    const saveStart = Date.now();
+    const saved = wasDirty || (await after.save());
+    const saveMs = Date.now() - saveStart;
+    if (saveMs > 2000) log.warn(`Saving ${plan.targetPath ?? plan.path} took ${saveMs} ms (VS Code save participants, a dialog, or a slow disk?)`);
+    if (!saved) {
       // The file changed on disk in the moment since the check. Put the buffer
       // back as it was (no unsaved edits of ours left behind) and report it.
       if (!target) {

@@ -417,7 +417,7 @@ class Context {
 
   private async viaExtension(request: CliRequest): Promise<CliResult | null> {
     if (this.io.env.KANBAN_NO_SOCKET) return null;
-    const response = await sendToExtension(this.project.socketRecord, request);
+    const response = await sendToExtension(this.project.socketRecord, request, (m) => this.io.stderr(`kanban: ${m}\n`));
     if (response === null) return null;
     if (response.ok) return response.result ?? null;
     if (response.code === 'conflict') throw new ConflictError(response.error);

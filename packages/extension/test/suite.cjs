@@ -717,6 +717,31 @@ const tests = {
     assert.equal(await vscode.env.clipboard.readText(), `.devtool/features/${card.path}`);
     await config.update('copyPathFormat', undefined, vscode.ConfigurationTarget.Workspace);
   },
+
+  async 'CLI requests with the same id are applied once (safe retries after a slow answer)'() {
+    const id = api().state().board.cards[0].fields.id;
+    const record = JSON.parse(fs.readFileSync(path.join(features(), '../.kanban.sock'), 'utf8'));
+    const send = (req) =>
+      new Promise((resolve, reject) => {
+        const c = require('node:net').createConnection(record.socket);
+        let buf = '';
+        c.on('connect', () => c.write(JSON.stringify(req) + '\n'));
+        c.on('data', (d) => {
+          buf += d;
+          if (buf.includes('\n')) {
+            c.end();
+            resolve(JSON.parse(buf));
+          }
+        });
+        c.on('error', reject);
+      });
+    const req = { op: 'note', requestId: 'retry-test-1', intent: { id, heading: 'Applied once' } };
+    const [a, b] = await Promise.all([send(req), send(req)]);
+    const again = await send(req);
+    assert.ok(a.ok && b.ok && again.ok, JSON.stringify([a, b, again]));
+    const text = disk(cardIn(id).path);
+    assert.equal(text.split('## Applied once').length - 1, 1, 'note applied more than once');
+  },
 };
 
 async function expectRejects(promise, pattern) {

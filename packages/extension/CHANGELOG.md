@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: a slow VS Code made the CLI report failures for changes that were saved.** CLI requests now carry an id: when VS Code is slow, the CLI says it's still waiting, asks again with the same id (up to a minute in total), and the extension applies the change only once. If it still times out, the message says the change may still land and to check before repeating.
+- The agent skill's description (what an agent sees before loading the skill) now gives the CLI's full path and says there's no plain `kanban` command, after an agent shortened it in its own notes and got "command not found".
+- The KanbanBananas log records each CLI request with how long it took, and warns when saving a card takes more than 2 seconds, to find what makes VS Code slow.
+
 ## 1.3.0 (Preview)
 
 - **Copy a card's path** to share it with an agent: a small button on each card (on hover), in the split view's header, and *Copy Card Path* in the card's right-click menu. Copies `@.devtool/features/<card>.md` by default, which attaches the file when pasted into an agent's chat; the *Copy path as* setting switches to the plain path.
