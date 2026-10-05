@@ -7,6 +7,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { useEffect, useRef, useState } from 'react';
 import { BodySync } from '../bodySync.js';
+import { ACK_TIMEOUT_MS, markDisconnected, onReconnect } from '../connection.js';
 import { onHostMessage, vscode } from '../vscode.js';
 import { assetBase, livePreview } from './livePreview.js';
 import { imageFiles, imageInsert, prepareImage } from './pasteImage.js';
@@ -53,6 +54,8 @@ export function InlineEditor(props: {
   /** Images being saved: where each link goes, kept up to date as the text changes. */
   const pendingImages = useRef(new Map<string, number>());
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** A save that got no answer: the connection is probably gone (see connection.ts). */
+  const answerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const escape = useRef(props.onEscape);
   escape.current = props.onEscape;
 
@@ -74,8 +77,23 @@ export function InlineEditor(props: {
       if (save) {
         setStatus('saving');
         vscode.postMessage({ type: 'saveBody', id, base: save.base, body: save.body });
+        clearTimeout(answerTimer.current);
+        answerTimer.current = setTimeout(() => {
+          // No answer: keep the text as unsaved edits; it's saved again when the connection is back.
+          if (!syncRef.current?.saving) return;
+          syncRef.current.failed();
+          setStatus('error');
+          setNotice("Not saved: VS Code isn't answering. Your text stays here and is saved as soon as the connection is back.");
+          markDisconnected();
+        }, ACK_TIMEOUT_MS);
       }
     };
+    const offReconnect = onReconnect(() => {
+      if (syncRef.current?.dirty) {
+        setNotice(null);
+        flush();
+      }
+    });
     const scheduleSave = () => {
       setStatus('unsaved');
       clearTimeout(saveTimer.current);
@@ -201,6 +219,7 @@ export function InlineEditor(props: {
           break;
         }
         case 'bodySaved': {
+          clearTimeout(answerTimer.current);
           const sync = syncRef.current!;
           applyFromHost(sync.saved(m.body));
           if (sync.dirty) scheduleSave();
@@ -208,11 +227,13 @@ export function InlineEditor(props: {
           break;
         }
         case 'bodyConflict':
+          clearTimeout(answerTimer.current);
           syncRef.current?.failed();
           setStatus('unsaved');
           setConflict({ theirs: m.theirs });
           break;
         case 'bodyError':
+          clearTimeout(answerTimer.current);
           syncRef.current?.failed();
           setStatus('error');
           setNotice(m.message);
@@ -227,6 +248,8 @@ export function InlineEditor(props: {
     return () => {
       flush();
       off();
+      offReconnect();
+      clearTimeout(answerTimer.current);
       vscode.postMessage({ type: 'closeEditor' });
       view.destroy();
       viewRef.current = null;

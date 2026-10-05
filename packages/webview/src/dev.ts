@@ -25,7 +25,13 @@ if (res.ok) {
     });
   }
   // A fake host for the inline editor: serves bodies and accepts saves.
-  (window as { __kanbanDevHost?: (m: { type: string; id?: string; body?: string }) => void }).__kanbanDevHost = (m) => {
+  // `__kanbanDevOffline = true` (or ?offline) plays a lost connection: nothing is answered.
+  const devWindow = window as { __kanbanDevOffline?: boolean };
+  devWindow.__kanbanDevOffline = new URLSearchParams(location.search).has('offline');
+  (window as { __kanbanDevHost?: (m: { type: string; id?: string; body?: string; requestId?: string }) => void }).__kanbanDevHost = (m) => {
+    if (devWindow.__kanbanDevOffline) return;
+    // Changes aren't stored here; acknowledge them like the extension does.
+    if (m.requestId && m.type !== 'saveImage') window.postMessage({ type: 'ack', requestId: m.requestId, ok: true }, '*');
     if (m.type === 'openEditor' && m.id === '#session-memory') {
       const body = '# Session memory\n\n## 2026-09-30T10:00:00.000Z\n\n**Working on:** offline-mode-for-the-mobile-app-2026-09-20: queue storage done, replay in progress\n**Done since last time:** queue storage and replay order\n**Next:** Wire the offline queue into the sync service, then test on a flaky connection.\n**Open questions:** none\n**Decisions:** replay oldest first, stop at the first conflict, because later writes may depend on earlier ones.\n';
       window.postMessage({ type: 'editorBody', id: m.id, path: '.devtool/session-memory.md', body }, '*');

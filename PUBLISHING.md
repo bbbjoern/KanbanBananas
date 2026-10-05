@@ -21,6 +21,16 @@ Note every user-visible change under **`## Unreleased`** at the top of
 
 ## Each release
 
+**The short way:** `npm run release -- <x.y.z>` does steps 1–3 and 5 below in one go:
+checks (typecheck, unit and integration tests), version bump, changelog `## Unreleased` →
+`## <x.y.z> (Preview)`, package (checked for the right version and no keywords), commit,
+annotated tag, and `git push --follow-tags`. It stops before changing anything if the version
+isn't newer, the tag exists, or the changelog has nothing under Unreleased; it asks before
+including uncommitted changes. Options: `--skip-integration` (skip the VS Code tests),
+`--dry-run` (show what would happen). Then do step 4 (try it) and step 6 (upload).
+
+The long way, by hand:
+
 1. **Version:** bump `version` in `packages/extension/package.json`, and rename `## Unreleased`
    in `packages/extension/CHANGELOG.md` to that version (e.g. `## 1.2.0 (Preview)`).
 2. Run the checks: `npm run typecheck && npm test && npm run test:integration -w kanban-bananas`.

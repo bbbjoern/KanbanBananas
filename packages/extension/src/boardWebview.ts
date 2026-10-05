@@ -42,8 +42,32 @@ export function attachBoard(
   let pendingSelect: string | null = null;
 
   const disposable = vscode.Disposable.from(
-    webview.onDidReceiveMessage((m: WebviewMessage) => {
+    webview.onDidReceiveMessage(async (m: WebviewMessage) => {
+      // Messages with a requestId get an ack once handled: the page uses it to know the
+      // change reached the extension (and that the connection is alive).
+      let error: string | null = null;
+      try {
+        error = await handle(m);
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+        log.error(`Board message ${m.type} failed: ${error}`);
+      }
+      if (m.requestId && m.type !== 'saveImage') {
+        post({ type: 'ack', requestId: m.requestId, ok: error === null, ...(error ? { error } : {}) });
+      }
+    }),
+    controller.onDidChange(() => {
+      if (!ready) return;
+      post(state());
+      editor.boardChanged();
+    }),
+  );
+
+  /** Handle one message from the page; resolves to an error message, or null when done. */
+  async function handle(m: WebviewMessage): Promise<string | null> {
       switch (m.type) {
+        case 'ping':
+          return null;
         case 'ready':
           log.info(`Board page (${layout}) loaded: build ${m.build ?? 'unknown (older than 0.5.4)'}`);
           ready = true;
@@ -55,14 +79,11 @@ export function attachBoard(
           void controller.openCard(m.path);
           break;
         case 'move':
-          void controller.move({ id: m.id, toStatus: m.toStatus, beforeId: m.beforeId });
-          break;
+          return controller.move({ id: m.id, toStatus: m.toStatus, beforeId: m.beforeId });
         case 'create':
-          void controller.create({ title: m.title, status: m.status });
-          break;
+          return controller.create({ title: m.title, status: m.status });
         case 'setFields':
-          void controller.setFields({ id: m.id, changes: m.changes });
-          break;
+          return controller.setFields({ id: m.id, changes: m.changes });
         case 'openEditor':
           editor.open(m.id);
           break;
@@ -156,13 +177,9 @@ export function attachBoard(
           controller.shownInEditor.push(m.id);
           break;
       }
-    }),
-    controller.onDidChange(() => {
-      if (!ready) return;
-      post(state());
-      editor.boardChanged();
-    }),
-  );
+      return null;
+  }
+
   return {
     dispose: () => disposable.dispose(),
     select: (id) => {

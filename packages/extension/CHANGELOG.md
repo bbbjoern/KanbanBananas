@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2 (Preview)
+- **Fix: new cards could vanish after the computer slept.** When the board lost its connection to VS Code (sleep, a dropped remote connection), changes went nowhere while the board looked as if they'd been made. Now every change from the board waits for VS Code to confirm it:
+  - A new card shows as *Creating…* until it's saved. If VS Code doesn't confirm, it stays on the board as *Not created*, with **Retry** and **Discard**, so the title isn't lost.
+  - A moved card goes back where it was if the move wasn't confirmed.
+  - The editor says *Not saved* instead of staying on *Saving…*, keeps your text, and saves it as soon as the connection is back.
+  - A banner says the board isn't connected. The board checks when you come back to it, and every few seconds while disconnected; once reconnected it reloads the cards and the banner goes.
+- **Small windows:** below about 800 px, an open card (or the session memory) takes the whole width and the board returns when it's closed, instead of being squeezed to a sliver. In the card's header the title keeps its room, the buttons move to their own row when they don't fit, and the filename stays on one line (full name on hover).
+
 ## 1.3.1 (Preview)
 
 - **Fix: a slow VS Code made the CLI report failures for changes that were saved.** CLI requests now carry an id: when VS Code is slow, the CLI says it's still waiting, asks again with the same id (up to a minute in total), and the extension applies the change only once. If it still times out, the message says the change may still land and to check before repeating.

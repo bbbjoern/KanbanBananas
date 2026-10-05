@@ -393,7 +393,8 @@ button {
 .detail {
   flex: 0 0 min(46%, 720px);
   transition: flex-basis 0.15s;
-  min-width: 360px;
+  min-width: min(360px, 100%);
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -403,17 +404,25 @@ button {
 
 .detail-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px 8px;
   padding: 12px 14px 8px;
 }
 
+/* The title gets room first; the buttons move to their own row when they don't fit beside it. */
 .detail-title {
-  flex: 1;
+  flex: 1 1 240px;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.detail-title .filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-title .title {
@@ -423,8 +432,11 @@ button {
 
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 4px;
-  flex: none;
+  flex: 0 1 auto;
+  margin-left: auto;
 }
 
 .tool {
@@ -1182,4 +1194,88 @@ button {
 .copy-path.with-label {
   padding: 3px 8px;
   font-size: 12px;
+}
+
+/* Small windows: an open card (or the session memory) takes the whole width;
+   the board comes back when it's closed. */
+@media (max-width: 800px) {
+  .workspace.split .board-area {
+    display: none;
+  }
+
+  .workspace.split .detail,
+  .workspace.split .detail.wide {
+    flex: 1 1 auto;
+    min-width: 0;
+    border-left: 0;
+  }
+
+  /* Widening makes no sense when it already fills the window. */
+  .detail-actions [aria-label='Wider editor'],
+  .detail-actions [aria-label='Narrower editor'] {
+    display: none;
+  }
+}
+
+/* A narrow editor: labels shrink to fit; fields go two per row. */
+@container (max-width: 420px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Connection lost / unconfirmed changes */
+
+.offline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--error) 50%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--error) 12%, var(--bg));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.offline p {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
+.offline .tool {
+  border: 1px solid var(--card-border-hover);
+}
+
+.card.pending {
+  cursor: default;
+  border-style: dashed;
+}
+
+.card.pending.creating {
+  opacity: 0.7;
+}
+
+.card.pending.failed {
+  border-color: var(--error);
+}
+
+.pending-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.card.pending.failed .pending-note {
+  color: var(--error);
+}
+
+.pending-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pending-actions .tool {
+  border: 1px solid var(--card-border-hover);
 }

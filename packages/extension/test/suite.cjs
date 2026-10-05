@@ -64,6 +64,13 @@ const tests = {
     assert.ok(board, 'no board tab');
   },
 
+  async 'board writes answer with their error, so the board can say so'() {
+    const controller = api().controller;
+    assert.equal(await controller.setFields({ id: 'title-only-2026-09-03', changes: { priority: 'low' } }), null);
+    const error = await controller.setFields({ id: 'no-such-card', changes: { priority: 'low' } });
+    assert.equal(typeof error, 'string', 'a failed write reported success');
+  },
+
   async 'picks up a new card written by someone else'() {
     const text = '---\nid: "outside-2026-09-25"\nstatus: "todo"\norder: "a5"\n---\n# Outside';
     fs.writeFileSync(path.join(features(), 'outside-2026-09-25.md'), text);

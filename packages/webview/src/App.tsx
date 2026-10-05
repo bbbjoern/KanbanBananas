@@ -17,7 +17,9 @@ import { MEMORY_EDITOR_ID, type BoardView, type BrokenView, type CardView, type 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { findColumn, moveCard, moveIntent, type Columns } from './columns.js';
 import { CopyPath } from './CopyPath.js';
+import { checkConnection, onReconnect, request, useConnected } from './connection.js';
 import { DetailPane, MemoryPane } from './DetailPane.js';
+import { PendingCardList, usePendingCards } from './pendingCards.js';
 import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
 import { filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
@@ -117,6 +119,10 @@ export function App({ layout }: { layout: Layout }) {
     return off;
   }, []);
 
+  const connected = useConnected();
+  // Back after a lost connection: ask for the current board, since changes may have happened meanwhile.
+  useEffect(() => onReconnect(() => vscode.postMessage({ type: 'ready' })), []);
+
   const queryRef = useRef(query);
   queryRef.current = query;
   useEffect(() => {
@@ -175,6 +181,8 @@ export function App({ layout }: { layout: Layout }) {
     return t;
   }, [board]);
 
+  const hostColumnsRef = useRef(hostColumns);
+  hostColumnsRef.current = hostColumns;
   // Working copy while dragging; replaced whenever the host sends a new board.
   const [columns, setColumns] = useState<Columns>(hostColumns);
   useEffect(() => {
@@ -229,10 +237,13 @@ export function App({ layout }: { layout: Layout }) {
     if (!intent) return;
     const target = parseCell(intent.toStatus);
     const card = cardsById.get(id);
-    vscode.postMessage({ type: 'move', id, toStatus: target.status, beforeId: intent.beforeId });
+    void request({ type: 'move', id, toStatus: target.status, beforeId: intent.beforeId }).then((r) => {
+      // Not confirmed: show the board as the files are, not as the drop suggested.
+      if (!r.ok) setColumns(hostColumnsRef.current);
+    });
     // Dropped into another lane: the card takes that lane's value too.
     if (grouping && card && target.value !== card.fields[grouping]) {
-      vscode.postMessage({ type: 'setFields', id, changes: { [grouping]: target.value } });
+      void request({ type: 'setFields', id, changes: { [grouping]: target.value } });
     }
   };
 
@@ -263,6 +274,18 @@ export function App({ layout }: { layout: Layout }) {
     >
       <div className={`workspace ${selectedCard || memoryOpen ? 'split' : ''} ${settings.hideScrollbars ? 'no-scrollbars' : ''}`}>
       <div className="board-area">
+      {!connected && (
+        <div className="offline" role="alert">
+          <p>
+            <strong>Not connected to KanbanBananas.</strong> Changes made now aren't saved. This usually happens after
+            the computer slept or the remote connection dropped; it reconnects by itself when it can.
+            If it doesn't, run <em>Developer: Reload Window</em>.
+          </p>
+          <button type="button" className="tool" onClick={checkConnection}>
+            Check again
+          </button>
+        </div>
+      )}
       <Toolbar
         layout={layout}
         cards={board.cards}
@@ -421,6 +444,7 @@ function LaneBoard(props: {
                   <NewCardForm status={col.id} onDone={() => props.onAdd(null)} />
                 </div>
               )}
+              <PendingCardList status={col.id} wrapped />
             </section>
           );
         })}
@@ -626,7 +650,12 @@ function Column(props: {
 }) {
   const { column, cards, collapsed, settings } = props;
   const { setNodeRef } = useDroppable({ id: COLUMN_PREFIX + column.id });
-  const form = props.adding && <NewCardForm status={column.id} onDone={props.onAddDone} />;
+  const form = (
+    <>
+      {props.adding && <NewCardForm status={column.id} onDone={props.onAddDone} />}
+      <PendingCardList status={column.id} />
+    </>
+  );
   return (
     <section className={`column ${collapsed ? 'collapsed' : ''}`} style={{ '--column-color': column.color } as React.CSSProperties}>
       {props.top}
@@ -852,8 +881,9 @@ function AddColumn() {
 
 function NewCardForm({ status, onDone }: { status: string; onDone: () => void }) {
   const [title, setTitle] = useState('');
+  const { create } = usePendingCards();
   const submit = () => {
-    if (title.trim()) vscode.postMessage({ type: 'create', title: title.trim(), status });
+    if (title.trim()) create(title.trim(), status);
     onDone();
   };
   return (

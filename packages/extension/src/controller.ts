@@ -117,15 +117,15 @@ export class BoardController implements vscode.Disposable {
     return this.source?.board();
   }
 
-  move(intent: MoveIntent): Promise<void> {
+  move(intent: MoveIntent): Promise<string | null> {
     return this.write((store) => store.move(intent));
   }
 
-  setFields(intent: SetFieldsIntent): Promise<void> {
+  setFields(intent: SetFieldsIntent): Promise<string | null> {
     return this.write((store) => store.setFields(intent));
   }
 
-  create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<void> {
+  create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<string | null> {
     const full = {
       ...intent,
       top: this.settings.view.addNewCardsToTop,
@@ -135,15 +135,21 @@ export class BoardController implements vscode.Disposable {
     return this.write((store) => store.create(full));
   }
 
-  /** Run a change; on failure, tell the user and redraw so optimistic UI snaps back. */
-  private async write(change: (store: CardStore) => Promise<unknown>): Promise<void> {
+  /**
+   * Run a change; on failure, tell the user and redraw so optimistic UI snaps
+   * back. Resolves to the error message, or null when it was written.
+   */
+  private async write(change: (store: CardStore) => Promise<unknown>): Promise<string | null> {
     try {
       if (!this.store) throw new Error('The board is not loaded.');
       await change(this.store);
+      return null;
     } catch (e) {
-      log.error(`Change failed: ${e instanceof Error ? e.message : String(e)}`);
-      void vscode.window.showErrorMessage(`KanbanBananas: ${e instanceof Error ? e.message : String(e)}`);
+      const message = e instanceof Error ? e.message : String(e);
+      log.error(`Change failed: ${message}`);
+      void vscode.window.showErrorMessage(`KanbanBananas: ${message}`);
       this.changed.fire();
+      return message;
     }
   }
 
@@ -246,8 +252,8 @@ export class BoardController implements vscode.Disposable {
     return this.eachCard(this.columnIds(status), `Archived ${status}`, (s, id) => s.archive(id));
   }
 
-  archive(id: string): Promise<void> {
-    return this.write((store) => store.archive(id));
+  async archive(id: string): Promise<void> {
+    await this.write((store) => store.archive(id));
   }
 
   async archivedCards(): Promise<{ id: string; title: string | null; status: string | null; path: string }[]> {
@@ -256,8 +262,8 @@ export class BoardController implements vscode.Disposable {
     return board.cards.map((c) => ({ id: c.card.fields.id!, title: c.card.title, status: c.card.fields.status, path: c.path }));
   }
 
-  restore(id: string): Promise<void> {
-    return this.write((store) => store.restore(id));
+  async restore(id: string): Promise<void> {
+    await this.write((store) => store.restore(id));
   }
 
   async deleteCard(id: string, permanently: boolean): Promise<void> {

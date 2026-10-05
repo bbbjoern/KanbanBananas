@@ -1,5 +1,6 @@
 import { MEMORY_EDITOR_ID, type CardView, type ViewSettings } from '@kanban-bananas/core';
 import { useEffect, useState } from 'react';
+import { request } from './connection.js';
 import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
@@ -25,7 +26,7 @@ export function DetailPane(props: {
 }) {
   const { card, settings } = props;
   const id = card.fields.id!;
-  const set = (changes: Record<string, string | string[] | null>) => vscode.postMessage({ type: 'setFields', id, changes });
+  const set = (changes: Record<string, string | string[] | null>) => void request({ type: 'setFields', id, changes });
   useEffect(() => {
     vscode.postMessage({ type: 'editorShown', id });
   }, [id]);
@@ -35,7 +36,9 @@ export function DetailPane(props: {
       <header className="detail-header">
         <div className="detail-title">
           <span className="title">{card.title ?? card.filename}</span>
-          <span className="filename">{card.path}</span>
+          <span className="filename" title={card.path}>
+            {card.path}
+          </span>
         </div>
         <div className="detail-actions">
           <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
@@ -66,7 +69,7 @@ export function DetailPane(props: {
           <span>Status</span>
           <select
             value={card.fields.status ?? ''}
-            onChange={(e) => vscode.postMessage({ type: 'move', id, toStatus: e.target.value, beforeId: null })}
+            onChange={(e) => void request({ type: 'move', id, toStatus: e.target.value, beforeId: null })}
           >
             {settings.columns.map((c) => (
               <option key={c.id} value={c.id}>

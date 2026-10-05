@@ -85,6 +85,8 @@ export const MEMORY_EDITOR_ID = '#session-memory';
 
 /** Messages from the extension host to the board webview. */
 export type HostMessage =
+  /** Answer to a webview message with a `requestId`: done, or what went wrong. */
+  | { type: 'ack'; requestId: string; ok: boolean; error?: string }
   /** `assetBase` is the project root as the page can load it, for showing `/…` image links. */
   | {
       type: 'state';
@@ -116,8 +118,12 @@ export type HostMessage =
   /** The card went away (deleted, broken, renamed): close the editor. */
   | { type: 'editorClosed'; id: string; reason: string };
 
-/** Messages from the board webview to the extension host: intents, never whole cards (spec §2.1). */
-export type WebviewMessage =
+/**
+ * Messages from the board webview to the extension host: intents, never whole cards (spec §2.1).
+ * A message with a `requestId` gets an `ack` back once it's done (or failed), so the page knows
+ * the change really reached the extension. Without one it assumes the connection is gone.
+ */
+export type WebviewMessage = { requestId?: string } & (
   /** The page loaded; `build` identifies its bundle (extension version + build time). */
   | { type: 'ready'; build?: string }
   | { type: 'openCard'; path: string }
@@ -159,7 +165,10 @@ export type WebviewMessage =
   /** Something in the webview threw; the host logs it. */
   | { type: 'clientError'; message: string; stack?: string }
   /** The split view rendered this card (for tests). */
-  | { type: 'editorShown'; id: string };
+  | { type: 'editorShown'; id: string }
+  /** Is the extension still there? Answered with an ack. */
+  | { type: 'ping' }
+);
 
 const EXCERPT_LENGTH = 160;
 
