@@ -1,7 +1,6 @@
 # Changelog
 
-## Unreleased
-
+## 1.3.3 (Preview)
 - **Fix: `kanban note` dropped note text given without `--body`.** `kanban note <id> --heading "Done" "What changed…"` wrote only the heading and reported success, so an agent's notes came out empty. The CLI now refuses anything a command doesn't take, and writes nothing: extra arguments, with a hint that text goes in `--body`, and unknown options such as `--bdy`. `note` also needs `--body` and refuses empty stdin. For a heading without text, pass `--body ""`.
 
 ## 1.3.2 (Preview)
