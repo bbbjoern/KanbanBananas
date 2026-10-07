@@ -1,7 +1,6 @@
 # Changelog
 
-## Unreleased
-
+## 1.4.0 (Preview)
 - **Column names and statuses can match.** A column's status (the `status` in its cards, which agents and the CLI use) used to stay as it was when you renamed the column, so "Discovery" could still be `backlog-2`. Renaming a column now offers to change the status to match the name: the cards move over in order, one line each, and the column keeps its place and colour. For a column renamed earlier, right-click it → *Rename Column*, keep the name and press Enter. Done keeps `done`, since its cards live in `done/`. Cards archived from the column keep the old status.
 - **Agents know the columns' names.** The skill lists each column as status and name (`backlog-2` (Discovery)), and `kanban move` and `--status` accept the name too, in any capitals: `kanban move <id> Discovery`. An unknown column lists both.
 - **Labels suggest existing ones as you type.** In an open card, labels are now chips with an input: typing lists the board's matching labels (↑/↓ to choose, Enter or Tab to add), and text that matches none is offered as a new label. A label already on the card isn't added twice, and typing `UI` when the board has `ui` uses `ui`, so the same label doesn't appear in two spellings. A comma also adds, pasting `a, b, c` adds all three, Backspace in the empty input removes the last label, and × removes one.
