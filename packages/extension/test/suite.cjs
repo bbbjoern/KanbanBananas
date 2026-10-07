@@ -373,7 +373,7 @@ const tests = {
     const id = 'numeric-order-2026-09-05';
     const controller = api().controller;
     const base = controller.cardBody(id).body;
-    await kanban(['note', id, '--heading', 'Agent was here']);
+    await kanban(['note', id, '--heading', 'Agent was here', '--body', 'Agent text.']);
     // Save based on the version before the note: merged, nothing lost.
     const merged = await controller.saveBody({ id, base, body: base.replace('# Numeric order', '# Numeric order, edited') });
     assert.ok(merged.includes('# Numeric order, edited'), 'edit lost');

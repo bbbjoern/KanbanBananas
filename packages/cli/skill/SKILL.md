@@ -35,7 +35,7 @@ Always by this full path, from the project root. There is no plain `kanban` comm
 | `show <id>` | Path, mtime, frontmatter and body |
 | `ls [--status s] [--label l] [--priority p]` | List cards |
 | `new "<title>" [--status s] [--priority p] [--labels a,b] [--body -]` | Create a card; id, order and timestamps are filled in |
-| `note <id> --heading "..." [--body -]` | Append a `## heading` section to the end of the card |
+| `note <id> --heading "..." --body -` | Append a `## heading` section to the end of the card. The text always goes in `--body` (`-` reads stdin, as in the examples below); text after the id is refused |
 | `move <id> <status> [--before <id> \| --after <id>]` | Change status (moves into or out of `done/` as needed) |
 | `set <id> key=value...` | `priority`, `assignee`, `epic`, `lane`, `dueDate` (YYYY-MM-DD), `labels`. `labels=a,b` sets, `labels=+a,-b` adds/removes, `key=` clears |
 | `edit <id> --body - --expect-mtime <mtime>` | Replace the whole body (everything after the frontmatter); refused if the card changed since `show` |

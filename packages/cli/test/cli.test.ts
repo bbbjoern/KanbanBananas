@@ -130,6 +130,34 @@ describe('session memory', () => {
 });
 
 describe('writing (no VS Code running)', () => {
+  it('refuses note text given as a plain argument, an unknown option or empty stdin, and writes nothing', async () => {
+    const card = 'add-login-page-2026-09-01';
+    const before = read(`${card}.md`);
+    const plain = await kanban(['note', card, '--heading', 'Done', 'What changed: the parser.']);
+    expect(plain.code).toBe(EXIT.usage);
+    expect(plain.stderr).toContain('unexpected argument "What changed: the parser."');
+    expect(plain.stderr).toContain('--body');
+    const typo = await kanban(['note', card, '--heading', 'Done', '--bdy', '-'], { stdin: 'Text.\n' });
+    expect(typo.code).toBe(EXIT.usage);
+    expect(typo.stderr).toContain('no option --bdy');
+    expect((await kanban(['note', card, '--heading', 'Done'])).code).toBe(EXIT.usage);
+    expect((await kanban(['note', card, '--heading', 'Done', '--body', '-'], { stdin: '  \n' })).code).toBe(EXIT.usage);
+    expect(read(`${card}.md`)).toBe(before);
+  });
+
+  it('writes a heading without text only when asked with --body ""', async () => {
+    const r = await kanban(['note', 'add-login-page-2026-09-01', '--heading', 'Checkpoint', '--body', '']);
+    expect(r.code).toBe(EXIT.ok);
+    expect(read('add-login-page-2026-09-01.md').endsWith('## Checkpoint\n')).toBe(true);
+  });
+
+  it('refuses extra arguments on other commands too', async () => {
+    expect((await kanban(['move', 'add-login-page-2026-09-01', 'done', 'now'])).code).toBe(EXIT.usage);
+    expect((await kanban(['new', 'Two', 'words'])).stderr).toContain('--body');
+    expect((await kanban(['find', 'add', 'login'])).stderr).toContain('quotes');
+    expect((await kanban(['ls', '--stauts', 'todo'])).stderr).toContain('--status');
+  });
+
   it('spec §12: a note on a card that moved to done/ lands in done/, and no new file appears', async () => {
     await kanban(['move', 'add-login-page-2026-09-01', 'done']);
     const before = readdirSync(features).sort();
@@ -209,12 +237,12 @@ describe('writing (no VS Code running)', () => {
   it('refuses unknown fields, statuses and ids without writing', async () => {
     expect((await kanban(['set', 'title-only-2026-09-03', 'status=done'])).code).toBe(EXIT.usage);
     expect((await kanban(['move', 'title-only-2026-09-03', 'someday'])).code).toBe(EXIT.usage);
-    expect((await kanban(['note', 'no-such-card', '--heading', 'x'])).code).toBe(EXIT.problems);
+    expect((await kanban(['note', 'no-such-card', '--heading', 'x', '--body', 'x'])).code).toBe(EXIT.problems);
   });
 
   it('refuses to touch a broken card and says so', async () => {
     writeFileSync(join(features, 'broken-2026-01-01.md'), '# no frontmatter');
-    const r = await kanban(['note', 'broken-2026-01-01', '--heading', 'x']);
+    const r = await kanban(['note', 'broken-2026-01-01', '--heading', 'x', '--body', 'x']);
     expect(r.code).toBe(EXIT.problems);
     expect(r.stderr).toMatch(/broken/);
     expect(read('broken-2026-01-01.md')).toBe('# no frontmatter');
@@ -237,7 +265,7 @@ describe('writing (no VS Code running)', () => {
     expect(read(`${id}.md`)).toContain('status: "todo"');
     expect((await kanban(['new', 'Shipped', '--status', 'done'], { policy: 'never' })).code).toBe(EXIT.refused);
     expect((await kanban(['new', 'Idea', '--status', 'backlog'], { policy: 'never' })).code).toBe(EXIT.ok);
-    expect((await kanban(['note', id, '--heading', 'Done — x'], { policy: 'never' })).code).toBe(EXIT.ok);
+    expect((await kanban(['note', id, '--heading', 'Done — x', '--body', 'x'], { policy: 'never' })).code).toBe(EXIT.ok);
     expect((await kanban(['move', id, 'review', '--force'], { policy: 'never' })).code).toBe(EXIT.ok);
   });
 

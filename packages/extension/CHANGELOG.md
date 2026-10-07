@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: `kanban note` dropped note text given without `--body`.** `kanban note <id> --heading "Done" "What changed…"` wrote only the heading and reported success, so an agent's notes came out empty. The CLI now refuses anything a command doesn't take, and writes nothing: extra arguments, with a hint that text goes in `--body`, and unknown options such as `--bdy`. `note` also needs `--body` and refuses empty stdin. For a heading without text, pass `--body ""`.
+
 ## 1.3.2 (Preview)
 - **Fix: new cards could vanish after the computer slept.** When the board lost its connection to VS Code (sleep, a dropped remote connection), changes went nowhere while the board looked as if they'd been made. Now every change from the board waits for VS Code to confirm it:
   - A new card shows as *Creating…* until it's saved. If VS Code doesn't confirm, it stays on the board as *Not created*, with **Retry** and **Discard**, so the title isn't lost.

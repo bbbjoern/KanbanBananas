@@ -65,7 +65,7 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban show <id>                        Frontmatter, body, path and mtime
   kanban ls [--status s] [--label l] [--priority p]
   kanban new "<title>" [--status s] [--priority p] [--labels a,b] [--body -|text]
-  kanban note <id> --heading "..." [--body -|text]   Append a section to the card
+  kanban note <id> --heading "..." --body -|text     Append a section to the card
   kanban move <id> <status> [--before <id> | --after <id>]
   kanban set <id> key=value...            priority, assignee, epic, lane, dueDate, labels
                                           labels=a,b sets; labels=+a,-b adds/removes; key= clears
@@ -97,6 +97,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
   }
 
   try {
+    checkArgs(command, rest, args.flags);
     const project = findProject(io.cwd, str(args.flags.dir) ?? io.env.KANBAN_DIR);
     // The board's columns, as installed with the skill, unless .devtool/kanban.json sets statuses itself.
     if (!project.config.statuses?.length && io.skillPolicy?.statuses?.length) project.statuses = io.skillPolicy.statuses;
@@ -296,7 +297,14 @@ class Context {
   async note(idArg: string): Promise<number> {
     const heading = str(this.args.flags.heading);
     if (!heading) throw new UsageError('note needs --heading "...".');
+    // A heading alone is almost never meant: text given another way was lost. `--body ""` says it's meant.
+    if (this.args.flags.body === undefined) {
+      throw new UsageError('note needs the text in --body (--body - reads stdin). For a heading without text, pass --body "".');
+    }
     const body = await this.body();
+    if (this.args.flags.body === '-' && !body?.trim()) {
+      throw new UsageError('note got no text on stdin (--body -). Nothing was written.');
+    }
     const board = await this.board();
     const id = this.resolveId(board, idArg);
     const intent = { id, heading, ...(body !== undefined ? { body } : {}) };
@@ -503,6 +511,45 @@ function parseLabels(value: string, current: string[]): string[] {
 }
 
 // Argument parsing: positionals plus --flag, --flag value and --flag=value.
+
+/** Flags every command takes. */
+const GLOBAL_FLAGS = ['json', 'dir', 'force', 'help', 'version'];
+
+/**
+ * What each command takes: plain arguments (after the command) and flags.
+ * Anything else is refused, so text given the wrong way is an error, not lost.
+ */
+const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string[] }> = {
+  find: { args: [1, 1], flags: [] },
+  show: { args: [1, 1], flags: [] },
+  ls: { args: [0, 0], flags: ['status', 'label', 'priority'] },
+  check: { args: [0, 0], flags: [] },
+  new: { args: [1, 1], flags: ['status', 'priority', 'labels', 'body'] },
+  note: { args: [1, 1], flags: ['heading', 'body'] },
+  move: { args: [2, 2], flags: ['before', 'after'] },
+  set: { args: [1, Infinity], flags: [] },
+  edit: { args: [1, 1], flags: ['body', 'expect-mtime'] },
+  memory: { args: [0, 0], flags: ['body', 'from-card', 'all'] },
+};
+
+function checkArgs(command: string, rest: string[], flags: Args['flags']): void {
+  const spec = COMMANDS[command];
+  if (!spec) return; // unknown commands are reported by the dispatch
+  const extra = rest[spec.args[1]];
+  if (extra !== undefined) {
+    const shown = extra.length > 60 ? `${extra.slice(0, 57)}...` : extra;
+    const hint = spec.flags.includes('body')
+      ? ' Text goes in --body "..." (or --body - to read stdin).'
+      : ' Put text with spaces in quotes.';
+    throw new UsageError(`unexpected argument "${shown}" for kanban ${command}.${hint} Nothing was written.`);
+  }
+  for (const name of Object.keys(flags)) {
+    if (!GLOBAL_FLAGS.includes(name) && !spec.flags.includes(name)) {
+      const takes = spec.flags.length ? ` It takes: ${spec.flags.map((f) => `--${f}`).join(', ')}.` : '';
+      throw new UsageError(`kanban ${command} has no option --${name}.${takes} Nothing was written.`);
+    }
+  }
+}
 
 interface Args {
   positional: string[];
