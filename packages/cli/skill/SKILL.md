@@ -44,7 +44,7 @@ Always by this full path, from the project root. There is no plain `kanban` comm
 **Screenshots:** cards may include images like `![](/.devtool/assets/<card-id>/2026-09-29-143012.webp)`. The path is relative to the project root (drop the leading `/`); open the file to see it. Don't add, move or delete files in the images folder yourself.
 
 `--body -` reads the text from stdin; use a heredoc for multi-line text. Every change prints the card's final path and new mtime.
-Statuses (the board's columns, in order): {{STATUSES}}.
+Columns, in order, as status (name on the board): {{STATUSES}}. The user usually says the name; `move` and `--status` take either.
 
 ## Recipes
 

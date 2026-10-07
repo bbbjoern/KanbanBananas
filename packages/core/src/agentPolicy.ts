@@ -16,6 +16,8 @@ export interface SkillPolicy {
   agentsMayMoveCards: AgentMovePolicy;
   /** The board's column ids, in order, so the CLI accepts the project's own columns. */
   statuses?: string[];
+  /** The columns' names on the board, by status, so agents can use the name the user says. */
+  columnNames?: Record<string, string>;
   /** Present when session memory is on: its file (relative to the project root) and how many entries to keep. */
   sessionMemory?: { file: string; keep: number };
 }

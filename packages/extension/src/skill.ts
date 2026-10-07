@@ -61,16 +61,17 @@ async function renderSkill(extensionUri: vscode.Uri, folder: vscode.WorkspaceFol
   const from = (name: string) => join(extensionUri.fsPath, 'dist', 'skill', name);
   const settings = readSettings();
   const statuses = settings.view.columns.map((c) => c.id);
+  const columnNames = Object.fromEntries(settings.view.columns.map((c) => [c.id, c.name]));
   const memory = settings.sessionMemory.enabled ? { file: settings.sessionMemory.file, keep: settings.sessionMemory.keep } : undefined;
   let skill = (await readFile(from('SKILL.md'), 'utf8'))
     .replaceAll('{{VERSION}}', version)
     .replaceAll('{{SESSION_MEMORY}}', memory ? sessionMemorySection(memory.file) : '')
-    .replaceAll('{{STATUSES}}', statuses.map((s) => `\`${s}\``).join(', '));
+    .replaceAll('{{STATUSES}}', settings.view.columns.map((c) => `\`${c.id}\` (${c.name})`).join(', '));
   for (const [key, text] of Object.entries(skillPolicyText(policy, '{{KANBAN}}'))) skill = skill.replaceAll(`{{${key}}}`, text);
   skill = skill.replaceAll('{{KANBAN}}', paths.command);
   return new Map([
     ['SKILL.md', Buffer.from(skill)],
-    [SKILL_POLICY_FILE, Buffer.from(JSON.stringify({ agentsMayMoveCards: policy, statuses, ...(memory ? { sessionMemory: memory } : {}) } satisfies SkillPolicy, null, 2) + '\n')],
+    [SKILL_POLICY_FILE, Buffer.from(JSON.stringify({ agentsMayMoveCards: policy, statuses, columnNames, ...(memory ? { sessionMemory: memory } : {}) } satisfies SkillPolicy, null, 2) + '\n')],
     ['scripts/kanban.mjs', await readFile(from('kanban.mjs'))],
     [EXECUTABLE, Buffer.from(launcher(process.execPath))],
     ['VERSION', Buffer.from(version + '\n')],

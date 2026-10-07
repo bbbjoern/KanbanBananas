@@ -17,10 +17,13 @@ function readSkillPolicy(): SkillPolicy | undefined {
     const policy = JSON.parse(readFileSync(path, 'utf8')) as Partial<SkillPolicy>;
     if (!isAgentMovePolicy(policy.agentsMayMoveCards)) return undefined;
     const statuses = Array.isArray(policy.statuses) && policy.statuses.every((s) => typeof s === 'string') ? policy.statuses : undefined;
+    const names = policy.columnNames;
+    const columnNames =
+      names && typeof names === 'object' && Object.values(names).every((n) => typeof n === 'string') ? (names as Record<string, string>) : undefined;
     const memory = policy.sessionMemory;
     const sessionMemory =
       memory && typeof memory.file === 'string' && typeof memory.keep === 'number' ? { file: memory.file, keep: memory.keep } : undefined;
-    return { agentsMayMoveCards: policy.agentsMayMoveCards, ...(statuses?.length ? { statuses } : {}), ...(sessionMemory ? { sessionMemory } : {}) };
+    return { agentsMayMoveCards: policy.agentsMayMoveCards, ...(statuses?.length ? { statuses } : {}), ...(columnNames ? { columnNames } : {}), ...(sessionMemory ? { sessionMemory } : {}) };
   } catch {
     return undefined;
   }

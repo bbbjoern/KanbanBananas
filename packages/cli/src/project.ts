@@ -25,6 +25,8 @@ export interface Project {
   socketRecord: string;
   config: ProjectConfig;
   statuses: string[];
+  /** Column names on the board, by status, when the extension provided them. */
+  columnNames?: Record<string, string>;
 }
 
 export class UsageError extends Error {

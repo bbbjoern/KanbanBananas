@@ -503,6 +503,101 @@ button {
   border-color: var(--accent);
 }
 
+/* Labels: chips plus an input that suggests the board's labels. */
+.labels-field {
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.labels-field > span:first-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.labels-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 4px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  cursor: text;
+}
+
+.labels-box:focus-within {
+  border-color: var(--accent);
+}
+
+.fields .labels-box input {
+  flex: 1 0 80px;
+  width: auto;
+  padding: 2px;
+  border: none;
+  background: none;
+}
+
+.label.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.label.chip button {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.label.chip button:hover {
+  color: var(--fg);
+}
+
+.label-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-width: 100%;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  border: 1px solid var(--card-border-hover);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 30%);
+  font-size: 12px;
+}
+
+.label-suggestions li {
+  padding: 4px 10px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-suggestions li.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.labels-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .inline-editor {
   position: relative;
   flex: 1;

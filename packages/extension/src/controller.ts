@@ -1,4 +1,4 @@
-import { labelCounts, loadBoard, MEMORY_EDITOR_ID, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
+import { DONE_STATUS, labelCounts, loadBoard, MEMORY_EDITOR_ID, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
@@ -285,7 +285,25 @@ export class BoardController implements vscode.Disposable {
     const next = change(this.settings.view.columns.map((c) => ({ ...c })));
     if (next.length === 0) throw new Error('A board needs at least one column.');
     await vscode.workspace.getConfiguration(SECTION).update('columns', next, vscode.ConfigurationTarget.Workspace);
+    this.settings = readSettings(); // don't wait for the change event: what follows may rely on the new columns
     log.info(`Saved columns to workspace settings: ${next.map((c) => `${c.id} "${c.name}"`).join(', ')}`);
+  }
+
+  /**
+   * Give a column a new status (id), e.g. `backlog-2` → `discovery` after a
+   * rename, so the status agents and the CLI use matches the name on the
+   * board. The new column is added beside the old one first and the cards
+   * move over in order, so every card has a valid status at every step; the
+   * old column goes only when all of them moved.
+   */
+  async changeColumnStatus(from: string, to: string, name: string): Promise<{ changed: number; failed: string[] }> {
+    if (from === DONE_STATUS) throw new Error('The Done column keeps its status: its cards live in done/.');
+    if (this.settings.view.columns.some((c) => c.id === to)) throw new Error(`There is already a column with status "${to}".`);
+    await this.updateColumns((cols) => cols.flatMap((c) => (c.id === from ? [{ ...c, name }, { ...c, id: to, name }] : [c])));
+    const r = await this.moveAll(from, to);
+    if (r.failed.length === 0) await this.updateColumns((cols) => cols.filter((c) => c.id !== from));
+    log.info(`Column status ${from} → ${to}: ${r.changed} card(s)${r.failed.length ? `, ${r.failed.length} failed; kept "${from}"` : ''}`);
+    return r;
   }
 
   /** Change the configured lane list of a grouping (workspace settings). */

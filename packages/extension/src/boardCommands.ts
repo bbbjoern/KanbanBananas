@@ -15,6 +15,8 @@ interface MenuContext {
   order?: (string | null)[];
   /** Deleting a column: where its cards go (a column id, or "archive"); skips the question. */
   moveTo?: string;
+  /** Renaming a column: also change its status to match the name (true) or not (false); skips the question. */
+  changeStatus?: boolean;
 }
 
 /** Colours offered for columns; new columns take the first one not in use. */
@@ -156,7 +158,7 @@ export function registerBoardCommands(controller: BoardController): vscode.Dispo
 
     vscode.commands.registerCommand(
       'kanbanBananas.column.rename',
-      guarded('Renaming the column failed', async ({ status, to: typed }) => {
+      guarded('Renaming the column failed', async ({ status, to: typed, changeStatus: given }) => {
         const column = controller.settingsNow.view.columns.find((c) => c.id === status);
         if (!column) return;
         const to = (
@@ -164,12 +166,49 @@ export function registerBoardCommands(controller: BoardController): vscode.Dispo
           (await vscode.window.showInputBox({
             title: `Rename column "${column.name}"`,
             value: column.name,
-            prompt: `Only the name on the board changes; its cards keep status "${column.id}".`,
+            prompt: `The name on the board. You can change the status in its cards ("${column.id}") to match next.`,
             validateInput: (v) => (v.trim() ? null : 'Enter a name.'),
           }))
         )?.trim();
-        if (!to || to === column.name) return;
-        await controller.updateColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name: to } : c)));
+        if (!to) return;
+        // The status is what agents and the CLI use; offer to make it match the name (not for Done: done/ depends on it).
+        const newStatus = slugify(to);
+        const statusFree = !!newStatus && !controller.settingsNow.view.columns.some((c) => c.id === newStatus);
+        const offerStatus = column.id !== DONE_STATUS && newStatus !== column.id && statusFree;
+        if (to === column.name && !offerStatus) return;
+        let changeStatus = false;
+        if (offerStatus && given !== undefined) changeStatus = given;
+        else if (offerStatus) {
+          const count = controller.columnIds(column.id).length;
+          const pick = await vscode.window.showInformationMessage(
+            `Also change the status of "${to}" from "${column.id}" to "${newStatus}"?`,
+            {
+              modal: true,
+              detail:
+                `Agents and the kanban CLI refer to columns by their status, so a status that matches the name avoids mix-ups. ` +
+                (count
+                  ? `${count} card${count === 1 ? '' : 's'} in this column change their status line (and modified date). Archived cards keep the old status.`
+                  : 'The column has no cards, so no file changes.'),
+            },
+            'Change Status Too',
+            'Only the Name',
+          );
+          if (!pick) return;
+          changeStatus = pick === 'Change Status Too';
+        }
+        if (!changeStatus) {
+          if (to !== column.name) await controller.updateColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name: to } : c)));
+          return;
+        }
+        const r = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Changing status ${column.id} → ${newStatus}…` },
+          () => controller.changeColumnStatus(column.id, newStatus, to),
+        );
+        if (r.failed.length) {
+          void vscode.window.showWarningMessage(
+            `KanbanBananas: ${r.failed.length} card(s) kept status "${column.id}", so that column was kept too: ${r.failed.join('; ')}`,
+          );
+        }
       }),
     ),
 

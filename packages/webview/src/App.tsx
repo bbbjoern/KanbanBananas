@@ -22,7 +22,7 @@ import { DetailPane, MemoryPane } from './DetailPane.js';
 import { PendingCardList, usePendingCards } from './pendingCards.js';
 import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
-import { filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
+import { distinct, filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
 import { onHostMessage, vscode } from './vscode.js';
 
@@ -364,6 +364,7 @@ export function App({ layout }: { layout: Layout }) {
           wide={wide}
           onToggleWide={() => setWide(!wide)}
           assetBase={assetBase}
+          knownLabels={distinct(board.cards, (c) => c.fields.labels)}
           onClose={() => setSelected(null)}
         />
       )}

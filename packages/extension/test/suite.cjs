@@ -546,9 +546,26 @@ const tests = {
     assert.equal(r.code, 0, r.err);
     assert.ok(await waitFor(() => cardIn(card)?.fields.status === 'blocked'));
 
-    await vscode.commands.executeCommand('kanbanBananas.column.rename', { status: 'blocked', to: 'Waiting' });
+    await vscode.commands.executeCommand('kanbanBananas.column.rename', { status: 'blocked', to: 'Waiting', changeStatus: false });
     assert.ok(await waitFor(() => controller.settingsNow.view.columns.find((c) => c.id === 'blocked')?.name === 'Waiting'));
     assert.equal(cardIn(card).fields.status, 'blocked', 'rename must not touch cards');
+
+    // The CLI takes the name too, once the skill knows it.
+    assert.ok(await waitFor(() => policy().columnNames?.blocked === 'Waiting'), JSON.stringify(policy()));
+    const byName = await kanbanResult(['move', card, 'todo'], undefined, path.join(root, '.claude/skills/kanban/scripts/kanban'));
+    assert.equal(byName.code, 0, byName.err);
+    const back = await kanbanResult(['move', card, 'Waiting'], undefined, path.join(root, '.claude/skills/kanban/scripts/kanban'));
+    assert.equal(back.code, 0, back.err);
+    assert.ok(await waitFor(() => cardIn(card)?.fields.status === 'blocked'));
+
+    // Renaming again (same name) with the status too: blocked → waiting, the card follows, the column keeps its place.
+    await vscode.commands.executeCommand('kanbanBananas.column.rename', { status: 'blocked', to: 'Waiting', changeStatus: true });
+    assert.ok(await waitFor(() => ids().join() === 'backlog,todo,in-progress,review,waiting,done'), ids().join());
+    assert.ok(await waitFor(() => cardIn(card)?.fields.status === 'waiting'), cardIn(card)?.fields.status);
+    assert.equal(controller.settingsNow.view.columns.find((c) => c.id === 'waiting').name, 'Waiting');
+    assert.deepEqual(api().state().board.broken, []);
+    await vscode.commands.executeCommand('kanbanBananas.column.rename', { status: 'waiting', to: 'Blocked', changeStatus: true });
+    assert.ok(await waitFor(() => cardIn(card)?.fields.status === 'blocked'), cardIn(card)?.fields.status);
 
     await controller.updateColumns((cols) => [cols.find((c) => c.id === 'blocked'), ...cols.filter((c) => c.id !== 'blocked')]);
     assert.ok(await waitFor(() => ids()[0] === 'blocked'), ids().join());

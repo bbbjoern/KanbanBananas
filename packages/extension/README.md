@@ -18,7 +18,7 @@ Every change goes through one write path that treats your files with care:
 ## The board
 
 - **Cards:** drag them between and within columns. Right-click a card to set its priority, labels, due date, assignee or epic, move, archive or delete it. The copy button on a card copies its path (as `@path`), ready to paste into an agent's chat.
-- **Columns:** add them (**+ Add column**), rename them by clicking the title, reorder them by dragging the ⋮⋮ handle, and right-click for colour, moving or archiving all their cards, and deleting. Only the chevron collapses a column.
+- **Columns:** add them (**+ Add column**), rename them by clicking the title (you're offered to change the status in their cards to match, e.g. `discovery` for "Discovery", which is what agents use), reorder them by dragging the ⋮⋮ handle, and right-click for colour, moving or archiving all their cards, and deleting. Only the chevron collapses a column.
 - **Split view:** click a card to edit it next to the board, in a live-preview markdown editor that saves automatically and never rewrites markdown you didn't touch. Outside changes (the board, a coding agent, another editor) merge into what you're typing; real overlaps ask you to choose. Widen the editor with ⇤.
 - **Screenshots:** paste an image into a card, or drag an image file onto it. It's saved next to the board and shown in the editor.
 - **Search and filters:** full-text search (`/`), and filters for priority, assignee, label and due date.

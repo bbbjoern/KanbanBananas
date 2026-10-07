@@ -100,7 +100,10 @@ export async function run(argv: string[], io: Io): Promise<number> {
     checkArgs(command, rest, args.flags);
     const project = findProject(io.cwd, str(args.flags.dir) ?? io.env.KANBAN_DIR);
     // The board's columns, as installed with the skill, unless .devtool/kanban.json sets statuses itself.
-    if (!project.config.statuses?.length && io.skillPolicy?.statuses?.length) project.statuses = io.skillPolicy.statuses;
+    if (!project.config.statuses?.length && io.skillPolicy?.statuses?.length) {
+      project.statuses = io.skillPolicy.statuses;
+      if (io.skillPolicy.columnNames) project.columnNames = io.skillPolicy.columnNames;
+    }
     const ctx = new Context(project, args, io);
     switch (command) {
       case 'find':
@@ -216,7 +219,8 @@ class Context {
   }
 
   async ls(): Promise<number> {
-    const { status, label, priority } = this.args.flags;
+    const { label, priority } = this.args.flags;
+    const status = typeof this.args.flags.status === 'string' ? this.statusFor(this.args.flags.status) : undefined;
     const cards = (await this.board()).cards.filter(
       (c) =>
         (status === undefined || c.card.fields.status === status) &&
@@ -259,8 +263,7 @@ class Context {
   // Writing
 
   async create(title: string): Promise<number> {
-    const status = str(this.args.flags.status) ?? this.project.statuses[0]!;
-    this.checkStatus(status);
+    const status = this.statusFor(str(this.args.flags.status) ?? this.project.statuses[0]!);
     this.enforcePolicy('create', status);
     const labels = str(this.args.flags.labels)?.split(',').map((l) => l.trim()).filter(Boolean);
     const body = await this.body();
@@ -311,8 +314,8 @@ class Context {
     return this.write({ op: 'note', intent }, id, () => planNote(board, intent, this.now()));
   }
 
-  async move(idArg: string, status: string): Promise<number> {
-    this.checkStatus(status);
+  async move(idArg: string, column: string): Promise<number> {
+    const status = this.statusFor(column);
     this.enforcePolicy('move', status);
     const board = await this.board();
     const id = this.resolveId(board, idArg);
@@ -469,10 +472,15 @@ class Context {
     throw new IntentError(`No card with id "${name}". Use kanban find to look it up.`);
   }
 
-  private checkStatus(status: string): void {
-    if (!this.project.statuses.includes(status)) {
-      throw new UsageError(`Unknown status "${status}". Statuses: ${this.project.statuses.join(', ')}.`);
-    }
+  /** The status for a column given by its status or its name on the board (any capitals). */
+  private statusFor(column: string): string {
+    const { statuses, columnNames = {} } = this.project;
+    if (statuses.includes(column)) return column;
+    const key = column.trim().toLowerCase();
+    const match = statuses.find((s) => s.toLowerCase() === key || columnNames[s]?.trim().toLowerCase() === key);
+    if (match) return match;
+    const list = statuses.map((s) => (columnNames[s] && columnNames[s] !== s ? `${s} (${columnNames[s]})` : s)).join(', ');
+    throw new UsageError(`Unknown column "${column}". Statuses: ${list}.`);
   }
 
   private enforcePolicy(action: 'move' | 'create', status: string): void {

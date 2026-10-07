@@ -4,6 +4,7 @@ import { request } from './connection.js';
 import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
+import { LabelsField } from './LabelsField.js';
 import { vscode } from './vscode.js';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
@@ -23,6 +24,8 @@ export function DetailPane(props: {
   onToggleWide: () => void;
   onClose: () => void;
   assetBase: string;
+  /** Every label on the board, to suggest while typing. */
+  knownLabels: string[];
 }) {
   const { card, settings } = props;
   const id = card.fields.id!;
@@ -98,13 +101,7 @@ export function DetailPane(props: {
         {((settings.lanes?.lane.length ?? 0) > 0 || card.fields.lane) && (
           <TextField label="Lane" value={card.fields.lane} onCommit={(v) => set({ lane: v || null })} />
         )}
-        <TextField
-          label="Labels"
-          wide
-          placeholder="comma, separated"
-          value={card.fields.labels.join(', ')}
-          onCommit={(v) => set({ labels: v.split(',').map((l) => l.trim()).filter(Boolean) })}
-        />
+        <LabelsField key={id} labels={card.fields.labels} known={props.knownLabels} onChange={(labels) => set({ labels })} />
       </div>
 
       <ErrorBoundary>

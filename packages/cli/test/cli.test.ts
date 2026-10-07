@@ -18,7 +18,10 @@ beforeEach(() => {
   cpSync(FIXTURES, features, { recursive: true });
 });
 
-async function kanban(args: string[], opts: { stdin?: string; cwd?: string; policy?: SkillPolicy['agentsMayMoveCards'] } = {}) {
+async function kanban(
+  args: string[],
+  opts: { stdin?: string; cwd?: string; policy?: SkillPolicy['agentsMayMoveCards']; skillPolicy?: SkillPolicy } = {},
+) {
   let stdout = '';
   let stderr = '';
   const code = await run(args, {
@@ -28,6 +31,7 @@ async function kanban(args: string[], opts: { stdin?: string; cwd?: string; poli
     stderr: (s) => void (stderr += s),
     readStdin: async () => opts.stdin ?? '',
     ...(opts.policy ? { skillPolicy: { agentsMayMoveCards: opts.policy } } : {}),
+    ...(opts.skillPolicy ? { skillPolicy: opts.skillPolicy } : {}),
   });
   return { code, stdout, stderr };
 }
@@ -149,6 +153,17 @@ describe('writing (no VS Code running)', () => {
     const r = await kanban(['note', 'add-login-page-2026-09-01', '--heading', 'Checkpoint', '--body', '']);
     expect(r.code).toBe(EXIT.ok);
     expect(read('add-login-page-2026-09-01.md').endsWith('## Checkpoint\n')).toBe(true);
+  });
+
+  it('takes a column by its name on the board as well as its status', async () => {
+    const policy = { agentsMayMoveCards: 'anywhere' as const, statuses: ['backlog-2', 'todo', 'done'], columnNames: { 'backlog-2': 'Discovery', todo: 'To Do', done: 'Done' } };
+    const r = await kanban(['move', 'add-login-page-2026-09-01', 'discovery'], { skillPolicy: policy });
+    expect(r.code).toBe(EXIT.ok);
+    expect(read('add-login-page-2026-09-01.md')).toContain('status: "backlog-2"');
+    expect((await kanban(['move', 'add-login-page-2026-09-01', 'To Do'], { skillPolicy: policy })).code).toBe(EXIT.ok);
+    const bad = await kanban(['move', 'add-login-page-2026-09-01', 'Someday'], { skillPolicy: policy });
+    expect(bad.code).toBe(EXIT.usage);
+    expect(bad.stderr).toContain('backlog-2 (Discovery)');
   });
 
   it('refuses extra arguments on other commands too', async () => {
