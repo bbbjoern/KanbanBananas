@@ -121,7 +121,7 @@ export function App({ layout }: { layout: Layout }) {
 
   const connected = useConnected();
   // Back after a lost connection: ask for the current board, since changes may have happened meanwhile.
-  useEffect(() => onReconnect(() => vscode.postMessage({ type: 'ready' })), []);
+  useEffect(() => onReconnect(() => vscode.postMessage({ type: 'ready', build: __BOARD_BUILD__, reconnect: true })), []);
 
   const queryRef = useRef(query);
   queryRef.current = query;

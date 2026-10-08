@@ -13,3 +13,4 @@ export * from './merge.js';
 export * from './search.js';
 export * from './assets.js';
 export * from './memory.js';
+export * from './textDiff.js';

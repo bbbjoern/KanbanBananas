@@ -44,6 +44,14 @@ describe('parseCard', () => {
     expect(parseOk(read('valid/add-login-page-2026-09-01.md')).title).toBe('Add login page');
   });
 
+  it('without a # heading, takes a heading on the first line, but not a later section', () => {
+    const card = (body: string) => `---\nid: "t-2026-01-01"\nstatus: "todo"\norder: "a0"\n---\n${body}`;
+    expect(parseOk(card('\n## Second level\n\nText.\n')).title).toBe('Second level');
+    expect(parseOk(card('## Not this\n\n# This one\n')).title).toBe('This one');
+    expect(parseOk(card('Some text first.\n\n## Done — a note\n')).title).toBeNull();
+    expect(parseOk(card('#### Fourth\n')).title).toBe('Fourth');
+  });
+
   it('accepts a body that is only a title with no trailing newline', () => {
     const card = parseOk(read('valid/title-only-2026-09-03.md'));
     expect(card.title).toBe('Title only');

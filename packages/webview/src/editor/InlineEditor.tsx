@@ -11,6 +11,7 @@ import { ACK_TIMEOUT_MS, markDisconnected, onReconnect } from '../connection.js'
 import { onHostMessage, vscode } from '../vscode.js';
 import { assetBase, livePreview } from './livePreview.js';
 import { imageFiles, imageInsert, prepareImage } from './pasteImage.js';
+import { taskInput } from './taskInput.js';
 
 const SAVE_DELAY_MS = 500;
 
@@ -111,6 +112,7 @@ export function InlineEditor(props: {
           // Lowest precedence, so Escape still closes the search panel first.
           Prec.lowest(keymap.of([{ key: 'Escape', run: () => (escape.current(), true) }])),
           markdown({ base: markdownLanguage }),
+          taskInput,
           syntaxHighlighting(highlight),
           EditorView.lineWrapping,
           liveMode.current.of(props.live ? livePreview : []),

@@ -204,8 +204,15 @@ function describe(v: unknown): string {
   return typeof v === 'object' ? 'a map' : `${typeof v} ${JSON.stringify(v)}`;
 }
 
+/**
+ * The card's title: its first `# ` heading outside code fences. Without one,
+ * a heading of any level on the first line counts (`## Title`), but not later
+ * ones: those are sections, such as notes appended at the end.
+ */
 function findTitle(body: string): string | null {
   let fence: string | null = null;
+  const first = body.split(/\r?\n/).find((l) => l.trim() !== '');
+  const fallback = first !== undefined ? /^#{2,6} (.*)$/.exec(first)?.[1]?.trim() || null : null;
   for (const line of body.split(/\r?\n/)) {
     const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
     if (fenceMatch) {
@@ -218,5 +225,5 @@ function findTitle(body: string): string | null {
     const heading = /^# (.*)$/.exec(line);
     if (heading) return heading[1]!.trim();
   }
-  return null;
+  return fallback;
 }

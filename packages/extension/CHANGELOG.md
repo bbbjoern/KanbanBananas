@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: text moved or duplicated when an agent changed a card open in the board's editor.** Changes from outside (an agent, the CLI, another editor) reached the board's editor as one block, from the first changed line to the last. Anything you had typed but not yet saved inside that span was moved to its end, mid-line, and then saved there: a space ended up before a full stop, and a pasted item with its screenshot was copied into an agent's new line, once per agent edit. Outside changes now arrive as separate changes, one per changed place, so unsaved typing stays where you typed it.
+- **Fix: an outside change that landed while the board's editor was saving could be missed** until the next change. After every save, the editor now gets anything newer.
+- The KanbanBananas log records each save from the board's editor (with short fingerprints of the texts and whether outside changes were merged in), and a board page that lost its connection and came back is logged as a reconnect instead of as an old page.
+- **A card that starts with `## Heading` gets that as its title**, instead of its filename. A `# ` heading anywhere still comes first; a heading further down (such as a note's `## Done — …`) never becomes the title.
+- **Typing a checkbox works without the dash.** Markdown only makes `[ ]` a checkbox in a list item (`- [ ] task`), so `[ ] task` stayed brackets. In the board's editor, typing `[ ]` or `[]` at the start of a line followed by a space now becomes `- [ ] `, and `- []` becomes `- [ ] `; one undo puts back what you typed. Code blocks are left alone. Enter after a checkbox line still starts the next one.
+
 ## 1.4.0 (Preview)
 - **Column names and statuses can match.** A column's status (the `status` in its cards, which agents and the CLI use) used to stay as it was when you renamed the column, so "Discovery" could still be `backlog-2`. Renaming a column now offers to change the status to match the name: the cards move over in order, one line each, and the column keeps its place and colour. For a column renamed earlier, right-click it → *Rename Column*, keep the name and press Enter. Done keeps `done`, since its cards live in `done/`. Cards archived from the column keep the old status.
 - **Agents know the columns' names.** The skill lists each column as status and name (`backlog-2` (Discovery)), and `kanban move` and `--status` accept the name too, in any capitals: `kanban move <id> Discovery`. An unknown column lists both.

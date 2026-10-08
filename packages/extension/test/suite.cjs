@@ -71,6 +71,24 @@ const tests = {
     assert.equal(typeof error, 'string', 'a failed write reported success');
   },
 
+  async 'a new heading in the board editor becomes the card title'() {
+    const controller = api().controller;
+    const id = 'title-only-2026-09-03';
+    const base = controller.cardBody(id).body;
+    await controller.saveBody({ id, base, body: base.replace(/^# .*$/m, '# A new headline') });
+    assert.ok(await waitFor(() => cardIn(id)?.title === 'A new headline'), `title is ${cardIn(id)?.title}`);
+    // Open in VS Code's editor too (buffer-aware writes), then change it again.
+    await vscode.window.showTextDocument(uri(cardIn(id).path));
+    const base2 = controller.cardBody(id).body;
+    await controller.saveBody({ id, base: base2, body: base2.replace(/^# .*$/m, '# Another headline') });
+    assert.ok(await waitFor(() => cardIn(id)?.title === 'Another headline'), `title is ${cardIn(id)?.title}`);
+    const base3 = controller.cardBody(id).body;
+    await controller.saveBody({ id, base: base3, body: base3.replace(/^# .*$/m, '# Title only') });
+    await vscode.commands.executeCommand('workbench.action.files.save');
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    assert.ok(await waitFor(() => cardIn(id)?.title === 'Title only'));
+  },
+
   async 'picks up a new card written by someone else'() {
     const text = '---\nid: "outside-2026-09-25"\nstatus: "todo"\norder: "a5"\n---\n# Outside';
     fs.writeFileSync(path.join(features(), 'outside-2026-09-25.md'), text);

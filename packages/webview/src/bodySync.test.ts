@@ -93,6 +93,41 @@ describe('BodySync', () => {
     expect(ed.sync.external(BODY + 'later\n')).toBeNull();
   });
 
+  it('an outside edit in several places leaves typing between them where it was typed (incident 2026-10-08)', () => {
+    const before = [
+      '## Open',
+      '- [ ] Make the inspector hidable',
+      '- [ ] Task Title cut off in Inspector',
+      '![](/.devtool/assets/x/shot.png)',
+      '',
+      '## Shipped',
+      '- [x] Description scroll bar — baaf95f',
+      '',
+      '## History',
+      '- baaf95f: description scrolls.',
+      '- Verified each time: make check.',
+      '',
+    ].join('\n');
+    // The agent's edit: an Open item goes, a Shipped item and a History line come in.
+    const after = before
+      .replace('- [ ] Task Title cut off in Inspector\n![](/.devtool/assets/x/shot.png)\n', '')
+      .replace('— baaf95f\n', '— baaf95f\n- [x] Task title no longer cut off — bf53942\n')
+      .replace('- Verified', '- bf53942: a long description cannot squeeze the title.\n- Verified');
+    const ed = new Editor(before, before.indexOf('— baaf95f') + '— baaf95f'.length);
+    ed.type(' (done)');
+    ed.apply(ed.sync.external(after));
+    expect(ed.text).toBe(after.replace('— baaf95f\n', '— baaf95f (done)\n'));
+    expect(ed.around(7)).toBe(' (done)|\n- [x] ');
+  });
+
+  it('a pending block typed in one place stays there when the agent edits above and below it', () => {
+    const before = 'A\n\nB\n\nC\n';
+    const ed = new Editor(before, before.indexOf('B') + 1);
+    ed.type('\n- [ ] new item\n![](/x.png)');
+    ed.apply(ed.sync.external('A changed\n\nB\n\nC changed.\n'));
+    expect(ed.text).toBe('A changed\n\nB\n- [ ] new item\n![](/x.png)\n\nC changed.\n');
+  });
+
   it('a save with nothing new does nothing', () => {
     const ed = new Editor(BODY, 0);
     expect(ed.sync.startSave(ed.text)).toBeNull();

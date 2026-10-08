@@ -125,7 +125,8 @@ export type HostMessage =
  */
 export type WebviewMessage = { requestId?: string } & (
   /** The page loaded; `build` identifies its bundle (extension version + build time). */
-  | { type: 'ready'; build?: string }
+  /** The page loaded, or (reconnect) got its connection back and wants the board again. */
+  | { type: 'ready'; build?: string; reconnect?: boolean }
   | { type: 'openCard'; path: string }
   | { type: 'move'; id: string; toStatus: string; beforeId: string | null }
   | { type: 'create'; title: string; status: string }

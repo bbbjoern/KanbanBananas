@@ -1,3 +1,4 @@
+import { textChanges } from '@kanban-bananas/core';
 import { ChangeSet, Text } from '@codemirror/state';
 
 /**
@@ -97,16 +98,12 @@ export class BodySync {
   }
 }
 
-/** The smallest single change from `a` to `b`, as a ChangeSet over `a`. */
+/**
+ * The changes from `a` to `b` as a ChangeSet over `a`: one change per changed
+ * region, so unsaved typing elsewhere keeps its place when rebased over them.
+ * (One range from the first difference to the last would swallow that typing
+ * and move it to the end of the range.)
+ */
 export function diffChange(a: string, b: string): ChangeSet {
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) start++;
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-  }
-  if (start === endA && start === endB) return ChangeSet.empty(a.length);
-  return ChangeSet.of({ from: start, to: endA, insert: b.slice(start, endB) }, a.length);
+  return ChangeSet.of(textChanges(a, b), a.length);
 }

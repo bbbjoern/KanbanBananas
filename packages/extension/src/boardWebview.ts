@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { BodyConflictError, MEMORY_EDITOR_ID, type HostMessage, type WebviewMessage } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import type { BoardController } from './controller.js';
@@ -69,7 +70,8 @@ export function attachBoard(
         case 'ping':
           return null;
         case 'ready':
-          log.info(`Board page (${layout}) loaded: build ${m.build ?? 'unknown (older than 0.5.4)'}`);
+          if (m.reconnect) log.warn(`Board page (${layout}) reconnected after VS Code didn't answer it for ${ACK_SECONDS} s; sent it the board again`);
+          else log.info(`Board page (${layout}) loaded: build ${m.build ?? 'unknown (older than 0.5.4)'}`);
           ready = true;
           post(state());
           if (pendingSelect) post({ type: 'selectCard', id: pendingSelect });
@@ -233,14 +235,23 @@ class EditorSession {
     this.post({ type: 'editorBody', id: this.id, path: card.path, body: card.body });
   }
 
+  /**
+   * The page ignores outside changes while its save is in flight (the save's
+   * answer carries the merged text). One that lands after the merge, before the
+   * answer, would be missed, so once the answer is out, push whatever is newer.
+   */
   async save(id: string, base: string, body: string): Promise<void> {
     try {
       const result = await this.controller.saveEditorDoc({ id, base, body });
+      log.info(
+        `Inline editor saved ${id}: base ${hash(base)}, sent ${hash(body)}, stored ${hash(result)}` +
+          (result === body ? '' : ' (merged with outside changes)'),
+      );
       if (this.id === id) this.known = result;
       this.post({ type: 'bodySaved', id, body: result });
     } catch (e) {
       if (e instanceof BodyConflictError) {
-        log.warn(`Inline editor conflict on ${id}`);
+        log.warn(`Inline editor conflict on ${id}: base ${hash(base)}, sent ${hash(body)}, theirs ${hash(e.theirs)}`);
         if (this.id === id) this.known = e.theirs;
         this.post({ type: 'bodyConflict', id, theirs: e.theirs });
         return;
@@ -248,7 +259,9 @@ class EditorSession {
       const message = e instanceof Error ? e.message : String(e);
       log.error(`Saving ${id} from the inline editor failed: ${message}`);
       this.post({ type: 'bodyError', id, message });
+      if (this.id === id) this.known = null; // the page may have missed changes meanwhile: send the current text
     }
+    if (this.id === id) this.boardChanged();
   }
 
   async diff(id: string, mine: string): Promise<void> {
@@ -281,4 +294,12 @@ function html(webview: vscode.Webview, extensionUri: vscode.Uri, layout: Layout,
   <script type="module" nonce="${nonce}" src="${asset('index.js')}"></script>
 </body>
 </html>`;
+}
+
+/** How long the page waits for an answer before it calls the connection lost (webview connection.ts). */
+const ACK_SECONDS = 8;
+
+/** A short fingerprint of a text, for the log (to reconstruct what was saved over what). */
+function hash(text: string): string {
+  return createHash('sha256').update(text).digest('hex').slice(0, 8);
 }
