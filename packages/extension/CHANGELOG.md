@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 (Preview)
 
 - **Session memory reaches the agent when a Claude Code session starts.** Agents only saw the "read the memory first" rule once something made them load the kanban skill, so a session could start without it. The extension now adds a *SessionStart* hook to the project's `.claude/settings.json` (to `.claude/settings.local.json` when *Personal* is on) that hands the agent the latest entry for a new session, after `/clear` and after compaction. The setting *Session memory: Load at session start* (on by default) turns it off; turning it or session memory off removes the hook again, and nothing else in the file is changed. Needs the agent skill installed; the hook does nothing when the skill or the memory is missing.
 - `kanban memory --session-start` prints the latest entry with a short intro for the agent, and never fails (used by the hook).
