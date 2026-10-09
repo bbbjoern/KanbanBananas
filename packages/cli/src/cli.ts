@@ -74,6 +74,7 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban memory [--all]                   Show the session memory (latest entry)
   kanban memory --body -|text             Save the current state of the work as the newest entry
   kanban memory --from-card <id>          Save a card's text as the newest entry (the card stays)
+  kanban memory --session-start           The latest entry with a short intro, for Claude Code's SessionStart hook
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -94,6 +95,18 @@ export async function run(argv: string[], io: Io): Promise<number> {
   if (command === 'version' || args.flags.version) {
     io.stdout(VERSION + '\n');
     return EXIT.ok;
+  }
+
+  // Run by Claude Code's SessionStart hook: its output goes into the agent's context. It must never
+  // fail or complain, so a missing board or memory just prints nothing.
+  if (command === 'memory' && args.flags['session-start'] === true) {
+    try {
+      checkArgs(command, rest, args.flags);
+      const project = findProject(io.cwd, str(args.flags.dir) ?? io.env.KANBAN_DIR);
+      return await new Context(project, args, io).memory();
+    } catch {
+      return EXIT.ok;
+    }
   }
 
   try {
@@ -384,6 +397,18 @@ class Context {
     if (body === undefined) {
       const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
       const entries = parseMemory(text, mtime());
+      if (this.args.flags['session-start'] === true) {
+        const latest = entries[0];
+        this.io.stdout(
+          latest
+            ? `Session memory of this project (${config.file}, from KanbanBananas): where the work stood when the last session ended. ` +
+                `Continue from its "Next" unless the user asks for something else, and keep it updated as the kanban skill describes.\n\n` +
+                `## ${latest.at}\n\n${latest.body}\n`
+            : `This project keeps a session memory (${config.file}, from KanbanBananas), but it has no entry yet. ` +
+                `Save one with the kanban skill once there is a plan.\n`,
+        );
+        return EXIT.ok;
+      }
       const shown = this.args.flags.all === true ? entries : entries.slice(0, 1);
       const label = (e: (typeof entries)[number]) => (e.handWritten ? `${e.at} (written by hand, no entry heading)` : e.at);
       this.out(
@@ -537,7 +562,7 @@ const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string
   move: { args: [2, 2], flags: ['before', 'after'] },
   set: { args: [1, Infinity], flags: [] },
   edit: { args: [1, 1], flags: ['body', 'expect-mtime'] },
-  memory: { args: [0, 0], flags: ['body', 'from-card', 'all'] },
+  memory: { args: [0, 0], flags: ['body', 'from-card', 'all', 'session-start'] },
 };
 
 function checkArgs(command: string, rest: string[], flags: Args['flags']): void {
@@ -564,7 +589,7 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all']);
+const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start']);
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];

@@ -700,6 +700,19 @@ const tests = {
     assert.match(fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8'), /## Session memory/);
     assert.match(fs.readFileSync(commandFile, 'utf8'), /memory --body -/);
 
+    // The SessionStart hook: in .claude/settings.json, next to settings someone else wrote there.
+    const settingsFile = path.join(root, '.claude/settings.json');
+    const localFile = path.join(root, '.claude/settings.local.json');
+    const hookIn = (file) => {
+      try {
+        return JSON.parse(fs.readFileSync(file, 'utf8')).hooks?.SessionStart?.flatMap((e) => e.hooks).find((h) => h.command.includes('memory --session-start'));
+      } catch {
+        return undefined;
+      }
+    };
+    assert.ok(await waitFor(() => hookIn(settingsFile)), 'session start hook not installed');
+    fs.writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')), model: 'mine' }, null, 2));
+
     const launcher = path.join(skillDir, 'scripts/kanban');
     for (const next of ['one', 'two', 'three']) {
       const r = await kanbanResult(['memory', '--body', '-', '--json'], `**Working on:** x\n**Next:** step ${next}`, launcher);
@@ -734,17 +747,35 @@ const tests = {
     const after = fs.readFileSync(path.join(root, '.devtool/session-memory.md'), 'utf8');
     assert.ok(after.includes('halfway through the parser') && after.includes('finish the parser'), after);
 
-    // Personal: listed in .git/info/exclude (this clone only), and taken out again.
+    // The hook's command, run the way Claude Code runs it, prints the latest entry for the agent.
+    const hookOut = execFileSync('/bin/sh', ['-c', hookIn(settingsFile).command], { cwd: root, env: { ...process.env, CLAUDE_PROJECT_DIR: root }, encoding: 'utf8' });
+    assert.match(hookOut, /^Session memory of this project/);
+    assert.match(hookOut, /finish the parser/);
+
+    // Personal: listed in .git/info/exclude (this clone only), and taken out again; the hook moves to settings.local.json.
     const exclude = path.join(root, '.git/info/exclude');
     await config.update('sessionMemory.personal', true, vscode.ConfigurationTarget.Workspace);
     assert.ok(await waitFor(() => fs.existsSync(exclude) && fs.readFileSync(exclude, 'utf8').includes('/.devtool/session-memory.md')));
+    assert.ok(await waitFor(() => hookIn(localFile) && !hookIn(settingsFile)), 'hook did not move to settings.local.json');
+    assert.equal(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).model, 'mine', 'other settings lost');
+    assert.ok(!fs.existsSync(localFile) || fs.readFileSync(localFile, 'utf8').includes('session-start'));
     await config.update('sessionMemory.personal', undefined, vscode.ConfigurationTarget.Workspace);
     assert.ok(await waitFor(() => !fs.readFileSync(exclude, 'utf8').includes('/.devtool/session-memory.md')));
+    assert.ok(await waitFor(() => hookIn(settingsFile) && !fs.existsSync(localFile)), 'hook did not move back');
+
+    // Turned off on its own: the hook goes, the rest stays.
+    await config.update('sessionMemory.loadAtSessionStart', false, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => !hookIn(settingsFile)));
+    assert.deepEqual(JSON.parse(fs.readFileSync(settingsFile, 'utf8')), { model: 'mine' });
+    await config.update('sessionMemory.loadAtSessionStart', undefined, vscode.ConfigurationTarget.Workspace);
+    assert.ok(await waitFor(() => hookIn(settingsFile)));
 
     // Off again: the command and the skill section go away.
     await config.update('sessionMemory.enabled', undefined, vscode.ConfigurationTarget.Workspace);
     await config.update('sessionMemory.keep', undefined, vscode.ConfigurationTarget.Workspace);
     assert.ok(await waitFor(() => !fs.existsSync(commandFile)), 'command not removed');
+    assert.ok(await waitFor(() => !hookIn(settingsFile)), 'hook not removed');
+    fs.rmSync(settingsFile);
     assert.ok(await waitFor(() => !fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8').includes('## Session memory')));
     assert.equal(api().state().memory, undefined);
   },

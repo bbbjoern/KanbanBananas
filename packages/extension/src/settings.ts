@@ -9,7 +9,7 @@ export interface Settings {
   featuresDirectory: string;
   /** Images folder, relative to the workspace folder. */
   imagesFolder: string;
-  sessionMemory: { enabled: boolean; file: string; keep: number; personal: boolean };
+  sessionMemory: { enabled: boolean; file: string; keep: number; personal: boolean; loadAtSessionStart: boolean };
   defaultPriority: string;
   /** Column for new cards from commands and N. */
   defaultStatus: string;
@@ -38,6 +38,7 @@ export function readSettings(): Settings {
       file: (get<string>('sessionMemory.file') || DEFAULT_MEMORY_FILE).replace(/^\/+/, ''),
       keep: Math.min(Math.max(Math.floor(Number(get<number>('sessionMemory.keep')) || 1), 1), MAX_MEMORY_ENTRIES),
       personal: get<boolean>('sessionMemory.personal') === true,
+      loadAtSessionStart: get<boolean>('sessionMemory.loadAtSessionStart') !== false,
     },
     defaultPriority: get<string>('defaultPriority'),
     defaultStatus: '',

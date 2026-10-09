@@ -14,3 +14,4 @@ export * from './search.js';
 export * from './assets.js';
 export * from './memory.js';
 export * from './textDiff.js';
+export * from './claudeHook.js';

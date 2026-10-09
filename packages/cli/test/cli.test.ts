@@ -86,6 +86,27 @@ describe('session memory', () => {
     return { code, stdout, stderr };
   }
 
+  it('--session-start (the Claude Code hook): the latest entry with an intro, and silence instead of errors', async () => {
+    const empty = await mem(['memory', '--session-start']);
+    expect(empty).toMatchObject({ code: EXIT.ok, stderr: '' });
+    expect(empty.stdout).toContain('no entry yet');
+    await mem(['memory', '--body', '-'], '**Next:** wire up the UI\n');
+    const r = await mem(['memory', '--session-start']);
+    expect(r).toMatchObject({ code: EXIT.ok, stderr: '' });
+    expect(r.stdout).toMatch(/^Session memory of this project \(\.devtool\/session-memory\.md/);
+    expect(r.stdout).toContain('**Next:** wire up the UI');
+    expect(await mem(['memory', '--session-start'], '', false)).toEqual({ code: EXIT.ok, stdout: '', stderr: '' });
+    const elsewhere = await run(['memory', '--session-start'], {
+      cwd: tmpdir(),
+      env: {},
+      stdout: () => expect.unreachable(),
+      stderr: () => expect.unreachable(),
+      readStdin: async () => '',
+      skillPolicy: policy,
+    });
+    expect(elsewhere).toBe(EXIT.ok);
+  });
+
   it('is refused while the setting is off', async () => {
     const r = await mem(['memory'], '', false);
     expect(r.code).toBe(EXIT.usage);

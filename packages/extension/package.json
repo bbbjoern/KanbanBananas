@@ -769,6 +769,11 @@
             "type": "boolean",
             "default": false,
             "markdownDescription": "Keep the session memory out of git for your clone only, by adding it to `.git/info/exclude` (not the shared `.gitignore`)."
+          },
+          "kanbanBananas.sessionMemory.loadAtSessionStart": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Hand agents the session memory when a Claude Code session starts, without relying on them to read it: adds a *SessionStart* hook to the project's `.claude/settings.json` (to `.claude/settings.local.json` when *Personal* is on) that runs the skill's `kanban memory`. Needs the agent skill installed. Turning this or session memory off removes the hook again; nothing else in the file is changed."
           }
         }
       }

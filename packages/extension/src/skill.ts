@@ -5,8 +5,10 @@ import { dirname, join } from 'node:path';
 import {
   DEFAULT_AGENT_MOVE_POLICY,
   isAgentMovePolicy,
+  sessionStartCommand,
   SKILL_POLICY_FILE,
   skillPolicyText,
+  withSessionStartHook,
   type AgentMovePolicy,
   type SkillPolicy,
 } from '@kanban-bananas/core';
@@ -86,7 +88,7 @@ function sessionMemorySection(file: string): string {
 
 This project keeps a **session memory** in \`${file}\`: where the work stands, so a new session (or another agent) can continue after an interruption without the old conversation. The user sees it on the board.
 
-- **At the start of a session**, before anything else, run \`{{KANBAN}} memory\` and continue from its "Next".
+- **At the start of a session**, before anything else, read it and continue from its "Next". In Claude Code it's usually handed to you as the session starts ("Session memory of this project…"); if it isn't in your context, run \`{{KANBAN}} memory\`.
 - **Update it** after a plan is agreed, at meaningful checkpoints, when you're blocked or waiting for the user, and whenever the user asks (e.g. \`/session-memory\`). Write it as you go: sessions can end without warning.
 - **Write the whole current state as one entry.** A new entry replaces the previous one, so carry over everything from it that still matters; don't condense it away. There is no length limit: include whatever the next session needs to continue without asking (the state of each thread, decisions and why, what was tried, context that isn't written anywhere else).
 
@@ -141,6 +143,39 @@ async function syncSessionCommand(folder: vscode.WorkspaceFolder, command: strin
 }
 
 /**
+ * The Claude Code SessionStart hook that hands agents the session memory:
+ * in .claude/settings.json, or settings.local.json when the memory is personal
+ * (kept out of git like the memory itself), and removed from the other one.
+ * A settings file that isn't plain JSON is left alone, with a warning.
+ */
+async function syncSessionStartHook(folder: vscode.WorkspaceFolder, command: string): Promise<void> {
+  const base = vscode.workspace.getConfiguration(SECTION).get<string>('skillDirectory') || '.claude/skills';
+  const claudeDir = base.replace(/\/+$/, '').replace(/\/skills$/, '');
+  if (!/(^|\/)\.claude$/.test(claudeDir)) return; // not Claude Code: no hooks
+  const { enabled, loadAtSessionStart, personal } = readSettings().sessionMemory;
+  const wanted = enabled && loadAtSessionStart ? (personal ? 'settings.local.json' : 'settings.json') : null;
+  for (const name of ['settings.json', 'settings.local.json']) {
+    const file = join(folder.uri.fsPath, ...claudeDir.split('/'), name);
+    const existing = await readFile(file, 'utf8').catch(() => null);
+    if (existing === null && name !== wanted) continue;
+    let next: string | null;
+    try {
+      next = withSessionStartHook(existing, name === wanted ? sessionStartCommand(command) : null);
+    } catch (e) {
+      log.warn(`Left ${name} alone: it isn't plain JSON (${e instanceof Error ? e.message : String(e)}), so the session start hook wasn't ${name === wanted ? 'added' : 'removed'}.`);
+      continue;
+    }
+    if (next === null) continue;
+    if (next.trim() === '{}') await rm(file); // only our hook was in it
+    else {
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, next);
+    }
+    log.info(`${name === wanted ? 'Added' : 'Removed'} the session start hook ${name === wanted ? 'to' : 'from'} ${claudeDir}/${name}`);
+  }
+}
+
+/**
  * The skill's launcher script, written at install time (the package ships no
  * shell script). It runs `node` from the PATH, else the JavaScript runtime this
  * extension itself runs on: on a remote, the Node that VS Code's server ships
@@ -190,6 +225,7 @@ export async function installSkill(
   }
   await chmod(join(paths.dir, ...EXECUTABLE.split('/')), 0o755);
   await syncSessionCommand(folder, paths.command);
+  await syncSessionStartHook(folder, paths.command);
   await writeFile(join(paths.dir, MANIFEST), JSON.stringify(manifest, null, 2) + '\n');
   log.info(`Installed agent skill in ${paths.dir}`);
   if (quiet) return;

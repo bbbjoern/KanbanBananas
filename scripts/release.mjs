@@ -89,7 +89,7 @@ if (dryRun) {
   console.log(`  (dry run) package.json "version": "${version}"; changelog "## Unreleased" → "${heading}"`);
 } else {
   writeFileSync(pkgPath, pkgText.replace(/"version": "[^"]+"/, `"version": "${version}"`));
-  writeFileSync(changelogPath, changelog.replace(/^## Unreleased\s*$/m, heading));
+  writeFileSync(changelogPath, changelog.replace(/^## Unreleased[ \t]*$/m, heading));
 }
 const restore = () => {
   if (dryRun) return;
