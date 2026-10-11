@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 (Preview)
 
 - **Log cards** for running lists instead of a card per detail, e.g. minor UI bugs. Set a card's *Type* to *Log* in the split view (it's `type: log` in the frontmatter; cards without it stay ordinary cards). Each entry is one checkbox item with its description and screenshots indented under it, so they can't drift apart. The board shows "Log · 2 open · 1 done" on the card.
 - **Entries as units in the editor:** a screenshot pasted while the cursor is in a list item goes under that item; in a log card, a screenshot pasted on an empty line starts a new entry with the cursor where its description goes. A ticked entry dims as a whole, screenshots included.
