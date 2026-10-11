@@ -1,4 +1,5 @@
 import type { Board } from './board.js';
+import { countEntries, type EntryCounts } from './entries.js';
 import type { CardFields } from './parse.js';
 
 /** Serializable board for the webview and `--json` output. No YAML document, no raw source. */
@@ -16,6 +17,8 @@ export interface CardView {
   excerpt: string | null;
   fields: CardFields;
   warnings: string[];
+  /** A log card's entries (`type: log`): how many are open and done. */
+  entries?: EntryCounts;
 }
 
 export interface BrokenView {
@@ -86,7 +89,8 @@ export const MEMORY_EDITOR_ID = '#session-memory';
 /** Messages from the extension host to the board webview. */
 export type HostMessage =
   /** Answer to a webview message with a `requestId`: done, or what went wrong. */
-  | { type: 'ack'; requestId: string; ok: boolean; error?: string }
+  /** A request was handled; `result` is what it produced, e.g. a created card's id. */
+  | { type: 'ack'; requestId: string; ok: boolean; error?: string; result?: string }
   /** `assetBase` is the project root as the page can load it, for showing `/…` image links. */
   | {
       type: 'state';
@@ -129,8 +133,9 @@ export type WebviewMessage = { requestId?: string } & (
   | { type: 'ready'; build?: string; reconnect?: boolean }
   | { type: 'openCard'; path: string }
   | { type: 'move'; id: string; toStatus: string; beforeId: string | null }
-  | { type: 'create'; title: string; status: string }
-  | { type: 'setFields'; id: string; changes: Partial<Record<'priority' | 'assignee' | 'epic' | 'dueDate' | 'labels' | 'lane', string | string[] | null>> }
+  /** A new card; `body` for one made from a log entry ("→ Card"). */
+  | { type: 'create'; title: string; status: string; body?: string }
+  | { type: 'setFields'; id: string; changes: Partial<Record<'priority' | 'assignee' | 'epic' | 'dueDate' | 'labels' | 'lane' | 'type', string | string[] | null>> }
   | { type: 'openEditor'; id: string }
   | { type: 'closeEditor' }
   /** Body edited from `base` in the inline editor (\n line endings). */
@@ -183,6 +188,7 @@ export function toBoardView(board: Board): BoardView {
       excerpt: excerpt(c.card.source.body),
       fields: c.card.fields,
       warnings: c.issues.map((i) => i.message),
+      ...(c.card.fields.type === 'log' ? { entries: countEntries(c.card.source.body) } : {}),
     })),
     broken: board.broken.map((b) => ({
       path: b.path,

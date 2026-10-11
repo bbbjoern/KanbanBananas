@@ -47,14 +47,15 @@ export function attachBoard(
       // Messages with a requestId get an ack once handled: the page uses it to know the
       // change reached the extension (and that the connection is alive).
       let error: string | null = null;
+      const out: { result?: string } = {};
       try {
-        error = await handle(m);
+        error = await handle(m, out);
       } catch (e) {
         error = e instanceof Error ? e.message : String(e);
         log.error(`Board message ${m.type} failed: ${error}`);
       }
       if (m.requestId && m.type !== 'saveImage') {
-        post({ type: 'ack', requestId: m.requestId, ok: error === null, ...(error ? { error } : {}) });
+        post({ type: 'ack', requestId: m.requestId, ok: error === null, ...(error ? { error } : {}), ...(out.result ? { result: out.result } : {}) });
       }
     }),
     controller.onDidChange(() => {
@@ -64,8 +65,8 @@ export function attachBoard(
     }),
   );
 
-  /** Handle one message from the page; resolves to an error message, or null when done. */
-  async function handle(m: WebviewMessage): Promise<string | null> {
+  /** Handle one message from the page; resolves to an error message, or null when done. `out.result` goes back with the ack. */
+  async function handle(m: WebviewMessage, out: { result?: string }): Promise<string | null> {
       switch (m.type) {
         case 'ping':
           return null;
@@ -82,8 +83,11 @@ export function attachBoard(
           break;
         case 'move':
           return controller.move({ id: m.id, toStatus: m.toStatus, beforeId: m.beforeId });
-        case 'create':
-          return controller.create({ title: m.title, status: m.status });
+        case 'create': {
+          const r = await controller.create({ title: m.title, status: m.status, ...(m.body ? { body: m.body } : {}) });
+          if (r.id) out.result = r.id;
+          return r.error;
+        }
         case 'setFields':
           return controller.setFields({ id: m.id, changes: m.changes });
         case 'openEditor':

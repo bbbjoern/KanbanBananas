@@ -15,6 +15,11 @@ export interface CardEdit {
    * and BodyConflictError is thrown when they touched the same lines.
    */
   rebase?: { base: string; mine: string };
+  /**
+   * A change worked out on the body as it is at write time (with \n line
+   * endings), e.g. adding or ticking a log entry. May throw to refuse.
+   */
+  bodyEdit?: (body: string) => string;
 }
 
 /** The editor's changes and someone else's overlap; nothing was written. */
@@ -33,7 +38,7 @@ export class BodyConflictError extends Error {
  */
 export function applyCardEdit(text: string, edit: CardEdit): string {
   const patched = Object.keys(edit.fields).length > 0 ? patchFields(text, edit.fields) : text;
-  if (edit.append === undefined && edit.body === undefined && edit.rebase === undefined) return patched;
+  if (edit.append === undefined && edit.body === undefined && edit.rebase === undefined && edit.bodyEdit === undefined) return patched;
 
   const parsed = parseCard(patched);
   if (!parsed.ok) throw new PatchError(`Refusing to edit a file that doesn't parse: ${parsed.error.message}`);
@@ -46,6 +51,7 @@ export function applyCardEdit(text: string, edit: CardEdit): string {
     if (merged === null) throw new BodyConflictError(current);
     body = withEol(merged, source.eol);
   }
+  if (edit.bodyEdit) body = withEol(edit.bodyEdit(body.replace(/\r\n/g, '\n')), source.eol);
   if (edit.append !== undefined) body = appendBlock(body, withEol(edit.append, source.eol), source.eol);
 
   const result = serializeCard({ ...parsed.card, source: { ...source, body } });

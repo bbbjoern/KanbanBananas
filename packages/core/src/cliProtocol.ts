@@ -1,3 +1,4 @@
+import type { LogIntent } from './entries.js';
 import type { CreateIntent, EditBodyIntent, MoveIntent, NoteIntent, SetFieldsIntent } from './ops.js';
 
 /**
@@ -25,6 +26,8 @@ export type CliRequest = { requestId?: string } & (
   | { op: 'move'; intent: MoveIntent }
   | { op: 'set'; intent: SetFieldsIntent }
   | { op: 'note'; intent: NoteIntent }
+  /** Add an entry to a log card, or tick one. */
+  | { op: 'log'; intent: LogIntent }
   | { op: 'edit'; intent: EditBodyIntent }
   | { op: 'create'; intent: CreateIntent }
   /** Add an entry to the session memory. */

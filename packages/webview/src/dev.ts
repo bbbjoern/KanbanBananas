@@ -24,6 +24,18 @@ if (res.ok) {
       if (i % 4 !== 3) c.fields.epic = epics[i % 3]!;
     });
   }
+  // ?demoLog: make the first card a log card (type: log) with a few entries.
+  if (new URLSearchParams(location.search).has('demoLog')) {
+    const card = data.board.cards[0];
+    card.fields.type = 'log';
+    card.title = 'Minor UI bugs';
+    card.entries = { open: 2, done: 1 };
+    bodies[card.fields.id] =
+      '# Minor UI bugs\n\n## Policy\n\nA running log for minor UI bugs. Don\'t move this card; add entries.\n\n' +
+      '- [ ] **Title cut off in Inspector**: long titles truncate at 20 characters\n' +
+      '- [x] **Row date column**: too narrow, 96 → 120px\n  ![](data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNjAnIGhlaWdodD0nNjAnPjxyZWN0IHdpZHRoPScxNjAnIGhlaWdodD0nNjAnIGZpbGw9JyM0NDUnLz48L3N2Zz4=)\n' +
+      '- [ ] **Focus frame jumps**: when the description scrolls\n';
+  }
   // A fake host for the inline editor: serves bodies and accepts saves.
   // `__kanbanDevOffline = true` (or ?offline) plays a lost connection: nothing is answered.
   const devWindow = window as { __kanbanDevOffline?: boolean };
@@ -31,7 +43,10 @@ if (res.ok) {
   (window as { __kanbanDevHost?: (m: { type: string; id?: string; body?: string; requestId?: string }) => void }).__kanbanDevHost = (m) => {
     if (devWindow.__kanbanDevOffline) return;
     // Changes aren't stored here; acknowledge them like the extension does.
-    if (m.requestId && m.type !== 'saveImage') window.postMessage({ type: 'ack', requestId: m.requestId, ok: true }, '*');
+    if (m.requestId && m.type !== 'saveImage') {
+      const result = m.type === 'create' ? `${String((m as { title?: string }).title).toLowerCase().replace(/[^a-z0-9]+/g, '-')}-2026-10-11` : undefined;
+      window.postMessage({ type: 'ack', requestId: m.requestId, ok: true, ...(result ? { result } : {}) }, '*');
+    }
     if (m.type === 'openEditor' && m.id === '#session-memory') {
       const body = '# Session memory\n\n## 2026-09-30T10:00:00.000Z\n\n**Working on:** offline-mode-for-the-mobile-app-2026-09-20: queue storage done, replay in progress\n**Done since last time:** queue storage and replay order\n**Next:** Wire the offline queue into the sync service, then test on a flaky connection.\n**Open questions:** none\n**Decisions:** replay oldest first, stop at the first conflict, because later writes may depend on earlier ones.\n';
       window.postMessage({ type: 'editorBody', id: m.id, path: '.devtool/session-memory.md', body }, '*');

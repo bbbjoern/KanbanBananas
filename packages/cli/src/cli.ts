@@ -14,7 +14,9 @@ import {
   planCreate,
   planEditBody,
   planMove,
+  planLog,
   planNote,
+  CARD_TYPES,
   planSetFields,
   policyRefusal,
   updateMemory,
@@ -64,8 +66,10 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban find <id|text>                   Current path of a card (always look up before acting)
   kanban show <id>                        Frontmatter, body, path and mtime
   kanban ls [--status s] [--label l] [--priority p]
-  kanban new "<title>" [--status s] [--priority p] [--labels a,b] [--body -|text]
+  kanban new "<title>" [--status s] [--priority p] [--labels a,b] [--type log] [--body -|text]
   kanban note <id> --heading "..." --body -|text     Append a section to the card
+  kanban log <id> --title "..." [--body -|text]      Add an entry to a log card (type: log)
+  kanban log <id> --done "<words from the entry>"    Tick the open entry that contains them
   kanban move <id> <status> [--before <id> | --after <id>]
   kanban set <id> key=value...            priority, assignee, epic, lane, dueDate, labels
                                           labels=a,b sets; labels=+a,-b adds/removes; key= clears
@@ -131,6 +135,8 @@ export async function run(argv: string[], io: Io): Promise<number> {
         return await ctx.create(need(rest[0], 'new "<title>"'));
       case 'note':
         return await ctx.note(need(rest[0], 'note <id> --heading "..."'));
+      case 'log':
+        return await ctx.log(need(rest[0], 'log <id> --title "..." [--body -]'));
       case 'move':
         return await ctx.move(need(rest[0], 'move <id> <status>'), need(rest[1], 'move <id> <status>'));
       case 'set':
@@ -281,9 +287,12 @@ class Context {
     const labels = str(this.args.flags.labels)?.split(',').map((l) => l.trim()).filter(Boolean);
     const body = await this.body();
     const priority = str(this.args.flags.priority);
+    const type = str(this.args.flags.type);
+    if (type !== undefined) checkType(type);
     const intent: CreateIntent = {
       title,
       status,
+      ...(type ? { type } : {}),
       ...(priority ? { priority } : {}),
       ...(labels?.length ? { labels } : {}),
       ...(body !== undefined ? { body } : {}),
@@ -327,11 +336,28 @@ class Context {
     return this.write({ op: 'note', intent }, id, () => planNote(board, intent, this.now()));
   }
 
+  async log(idArg: string): Promise<number> {
+    const done = str(this.args.flags.done);
+    const title = str(this.args.flags.title);
+    const text = await this.body();
+    if (done !== undefined && (title !== undefined || text !== undefined)) throw new UsageError('Use --done on its own, or --title/--body to add an entry.');
+    if (done === undefined && !title?.trim() && !text?.trim()) {
+      throw new UsageError('log needs --title "..." and/or --body (--body - reads stdin), or --done "<words from the entry>".');
+    }
+    const board = await this.board();
+    const id = this.resolveId(board, idArg);
+    const intent = { id, ...(done !== undefined ? { done } : {}), ...(title ? { title } : {}), ...(text ? { text } : {}) };
+    return this.write({ op: 'log', intent }, id, () => planLog(board, intent, this.now()));
+  }
+
   async move(idArg: string, column: string): Promise<number> {
     const status = this.statusFor(column);
     this.enforcePolicy('move', status);
     const board = await this.board();
     const id = this.resolveId(board, idArg);
+    if (findCard(board, id).card.fields.type === 'log' && this.args.flags.force !== true) {
+      throw new PolicyError('This is a log card: it stays in its column and collects entries (kanban log). Move it only if the user asks, with --force.');
+    }
     const before = str(this.args.flags.before);
     const after = str(this.args.flags.after);
     if (before && after) throw new UsageError('Use --before or --after, not both.');
@@ -356,7 +382,10 @@ class Context {
       }
       if (key === 'labels') changes.labels = parseLabels(value, card.card.fields.labels);
       else if (key === 'dueDate' && value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new UsageError('dueDate must be YYYY-MM-DD.');
-      else changes[key] = value === '' ? null : value;
+      else {
+        if (key === 'type' && value) checkType(value);
+        changes[key] = value === '' ? null : value;
+      }
     }
     const intent = { id, changes };
     return this.write({ op: 'set', intent }, id, () => planSetFields(board, intent, this.now()));
@@ -557,7 +586,8 @@ const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string
   show: { args: [1, 1], flags: [] },
   ls: { args: [0, 0], flags: ['status', 'label', 'priority'] },
   check: { args: [0, 0], flags: [] },
-  new: { args: [1, 1], flags: ['status', 'priority', 'labels', 'body'] },
+  new: { args: [1, 1], flags: ['status', 'priority', 'labels', 'body', 'type'] },
+  log: { args: [1, 1], flags: ['title', 'body', 'done'] },
   note: { args: [1, 1], flags: ['heading', 'body'] },
   move: { args: [2, 2], flags: ['before', 'after'] },
   set: { args: [1, Infinity], flags: [] },
@@ -623,4 +653,10 @@ function str(v: string | true | undefined): string | undefined {
 function need(v: string | undefined, usage: string): string {
   if (!v) throw new UsageError(`Usage: kanban ${usage}`);
   return v;
+}
+
+function checkType(type: string): void {
+  if (!(CARD_TYPES as readonly string[]).includes(type)) {
+    throw new UsageError(`Unknown card type "${type}". Types: ${CARD_TYPES.join(', ')} (or none for an ordinary card).`);
+  }
 }

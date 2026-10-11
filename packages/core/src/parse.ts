@@ -14,6 +14,7 @@ export const KNOWN_FIELDS = [
   'labels',
   'order',
   'lane',
+  'type',
 ] as const;
 
 export type KnownField = (typeof KNOWN_FIELDS)[number];
@@ -33,6 +34,8 @@ export interface CardFields {
   order: string | null;
   /** Optional free-text lane, used when the board is grouped by Lane. Absent on most cards. */
   lane: string | null;
+  /** Card type: absent (null) for an ordinary card, `log` for a running log of entries. */
+  type: string | null;
 }
 
 /**
@@ -194,6 +197,7 @@ function readFields(raw: Record<string, unknown>): { fields: CardFields; problem
       labels,
       order,
       lane: str('lane'),
+      type: str('type'),
     },
     problems: problems.sort((a, b) => KNOWN_FIELDS.indexOf(a.field) - KNOWN_FIELDS.indexOf(b.field)),
   };

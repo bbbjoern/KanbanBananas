@@ -89,6 +89,26 @@ const tests = {
     assert.ok(await waitFor(() => cardIn(id)?.title === 'Title only'));
   },
 
+  async 'log cards: entries through VS Code, counts on the board, a card made from an entry'() {
+    const controller = api().controller;
+    const created = JSON.parse(await kanban(['new', 'Minor UI bugs', '--type', 'log', '--status', 'todo', '--json']));
+    const id = created.path.replace(/^.*\//, '').replace(/\.md$/, '');
+    const r = JSON.parse(await kanban(['log', id, '--title', 'Title cut off', '--body', '-', '--json'], 'Long titles truncate.\n'));
+    assert.equal(r.handledBy, 'vscode');
+    await kanban(['log', id, '--title', 'Row date column']);
+    await kanban(['log', id, '--done', 'row date']);
+    assert.ok(await waitFor(() => cardIn(id)?.entries?.open === 1 && cardIn(id)?.entries?.done === 1), JSON.stringify(cardIn(id)?.entries));
+    assert.equal(cardIn(id).fields.type, 'log');
+    // The board's "→ Card": a create with a body, answered with the new card's id.
+    const made = await controller.create({ title: 'Title cut off', status: 'backlog', body: 'Long titles truncate.' });
+    assert.equal(made.error, null);
+    assert.ok(await waitFor(() => cardIn(made.id)), `no card ${made.id}`);
+    assert.match(disk(cardIn(made.id).path), /# Title cut off\n\nLong titles truncate\.\n$/);
+    // Back to an ordinary card from the board's Type field.
+    assert.equal(await controller.setFields({ id, changes: { type: null } }), null);
+    assert.ok(await waitFor(() => cardIn(id)?.fields.type === null && !cardIn(id).entries));
+  },
+
   async 'picks up a new card written by someone else'() {
     const text = '---\nid: "outside-2026-09-25"\nstatus: "todo"\norder: "a5"\n---\n# Outside';
     fs.writeFileSync(path.join(features(), 'outside-2026-09-25.md'), text);

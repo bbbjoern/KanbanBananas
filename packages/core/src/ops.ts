@@ -20,7 +20,7 @@ export interface MoveIntent {
 }
 
 /** Fields a user may edit directly. `status`, `order` and timestamps are managed by moves. */
-export const EDITABLE_FIELDS = ['priority', 'assignee', 'epic', 'dueDate', 'labels', 'lane'] as const;
+export const EDITABLE_FIELDS = ['priority', 'assignee', 'epic', 'dueDate', 'labels', 'lane', 'type'] as const;
 export type EditableField = (typeof EDITABLE_FIELDS)[number];
 
 export interface SetFieldsIntent {
@@ -37,6 +37,8 @@ export interface CreateIntent {
   top?: boolean;
   /** Body text after the title. */
   body?: string;
+  /** Card type, e.g. `log`; absent for an ordinary card. */
+  type?: string;
   /** Filename pattern, e.g. `{slug}-{date}` (the default). */
   filenamePattern?: string;
 }
@@ -60,6 +62,8 @@ export interface Plan {
   expectMtimeMs?: number;
   /** An editor's body edited from `base`; merged with any change made since (see CardEdit.rebase). */
   rebase?: { base: string; mine: string };
+  /** A change to the body as it is when written (see CardEdit.bodyEdit). */
+  bodyEdit?: (body: string) => string;
 }
 
 export interface SaveBodyIntent {
@@ -249,6 +253,7 @@ export function planCreate(board: Board, intent: CreateIntent, now: Date, taken:
     `completedAt: ${intent.status === DONE_STATUS ? q(stamp) : 'null'}`,
     `labels: [${labels.map(q).join(', ')}]`,
     `order: ${q(order)}`,
+    ...(intent.type ? [`type: ${q(intent.type)}`] : []),
     '---',
     `# ${title}`,
   ].join('\n');

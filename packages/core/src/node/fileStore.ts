@@ -120,5 +120,6 @@ export function cardEdit(plan: Plan) {
     ...(plan.append !== undefined ? { append: plan.append } : {}),
     ...(plan.body !== undefined ? { body: plan.body } : {}),
     ...(plan.rebase !== undefined ? { rebase: plan.rebase } : {}),
+    ...(plan.bodyEdit !== undefined ? { bodyEdit: plan.bodyEdit } : {}),
   };
 }

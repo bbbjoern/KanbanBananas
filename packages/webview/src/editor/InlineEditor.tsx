@@ -7,10 +7,11 @@ import { EditorView, keymap } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { useEffect, useRef, useState } from 'react';
 import { BodySync } from '../bodySync.js';
-import { ACK_TIMEOUT_MS, markDisconnected, onReconnect } from '../connection.js';
+import { ACK_TIMEOUT_MS, markDisconnected, onReconnect, request } from '../connection.js';
 import { onHostMessage, vscode } from '../vscode.js';
 import { assetBase, livePreview } from './livePreview.js';
-import { imageFiles, imageInsert, prepareImage } from './pasteImage.js';
+import { cardFromEntry, entryMenu, imagePlacement, promoteEntry, promoteEntryButton } from './entries.js';
+import { imageFiles, prepareImage } from './pasteImage.js';
 import { taskInput } from './taskInput.js';
 
 const SAVE_DELAY_MS = 500;
@@ -43,6 +44,10 @@ export function InlineEditor(props: {
   images: { format: 'webp' | 'png'; maxWidth: number };
   /** Where the page can load project files from, for showing `/…` image links. */
   assetBase: string;
+  /** A log card (`type: log`): pasted screenshots start entries, and entries can become cards. */
+  log?: boolean;
+  /** Column for cards made from entries. */
+  newCardStatus?: string;
 }) {
   const { id } = props;
   const host = useRef<HTMLDivElement>(null);
@@ -50,6 +55,14 @@ export function InlineEditor(props: {
   const syncRef = useRef<BodySync | null>(null);
   const liveMode = useRef(new Compartment());
   const baseConfig = useRef(new Compartment());
+  const logMode = useRef(new Compartment());
+  const logRef = useRef(!!props.log);
+  logRef.current = !!props.log;
+  const statusRef = useRef(props.newCardStatus);
+  statusRef.current = props.newCardStatus;
+  /** "→ Card" for log cards; set once the editor exists. The facet calls it through this stable function. */
+  const promoteRef = useRef<((entry: { from: number; to: number; text: string }) => Promise<void>) | null>(null);
+  const onPromote = useRef((entry: { from: number; to: number; text: string }) => void promoteRef.current?.(entry)).current;
   const imageSettings = useRef(props.images);
   imageSettings.current = props.images;
   /** Images being saved: where each link goes, kept up to date as the text changes. */
@@ -116,6 +129,9 @@ export function InlineEditor(props: {
           syntaxHighlighting(highlight),
           EditorView.lineWrapping,
           liveMode.current.of(props.live ? livePreview : []),
+          entryMenu,
+          promoteEntryButton,
+          logMode.current.of(props.log ? promoteEntry.of(onPromote) : []),
           baseConfig.current.of(assetBase.of(props.assetBase)),
           EditorState.readOnly.of(false),
           EditorView.updateListener.of((u) => {
@@ -168,6 +184,28 @@ export function InlineEditor(props: {
       }
     };
 
+    /** "→ Card": make the entry its own card, then tick it here with a pointer to the card. */
+    const promote = async (entry: { from: number; to: number; text: string }) => {
+      const status = statusRef.current;
+      if (!status) return;
+      const { title, body } = cardFromEntry(entry.text);
+      setNotice(`Creating the card "${title}"…`);
+      const r = await request({ type: 'create', title, status, ...(body ? { body } : {}) });
+      if (!r.ok || !r.result) {
+        setNotice(`The card wasn't created: ${r.error ?? 'no answer from VS Code'}. The entry is unchanged.`);
+        return;
+      }
+      const at = view.state.doc.toString().indexOf(entry.text);
+      if (at === -1) {
+        setNotice(`Created the card ${r.result}. The entry changed meanwhile, so it was left as it is.`);
+        return;
+      }
+      const pointer = `- [x] **${title}**: moved to card \`${r.result}\``;
+      view.dispatch({ changes: { from: at, to: at + entry.text.length, insert: pointer } });
+      setNotice(`Created the card ${r.result}.`);
+    };
+    promoteRef.current = promote;
+
     const saveImages = async (files: File[], at: number) => {
       for (const file of files) {
         const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -194,10 +232,10 @@ export function InlineEditor(props: {
           return;
         }
         setNotice(null);
-        // An ordinary edit: it saves and syncs like typing.
+        // An ordinary edit: it saves and syncs like typing. Under the entry the cursor is in, or a new entry in a log.
         const pos = Math.min(at, view.state.doc.length);
-        const insert = imageInsert(view.state.doc.toString(), pos, m.link);
-        view.dispatch({ changes: { from: pos, insert }, selection: { anchor: pos + insert.length } });
+        const place = imagePlacement(view.state.doc.toString(), pos, m.link, logRef.current);
+        view.dispatch({ changes: { from: place.from, insert: place.insert }, selection: { anchor: place.cursor } });
         return;
       }
       if (!('id' in m) || m.id !== id) return;
@@ -263,6 +301,10 @@ export function InlineEditor(props: {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: liveMode.current.reconfigure(props.live ? livePreview : []) });
   }, [props.live]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: logMode.current.reconfigure(props.log ? promoteEntry.of(onPromote) : []) });
+  }, [props.log, onPromote]);
 
   useEffect(() => {
     viewRef.current?.dispatch({ effects: baseConfig.current.reconfigure(assetBase.of(props.assetBase)) });

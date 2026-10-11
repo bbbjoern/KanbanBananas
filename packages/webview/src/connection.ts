@@ -19,6 +19,8 @@ export interface RequestResult {
   error?: string;
   /** No answer at all: the change probably didn't reach the extension. */
   timedOut?: boolean;
+  /** What the request produced, e.g. a created card's id. */
+  result?: string;
 }
 
 let connected = true;
@@ -63,7 +65,7 @@ function onMessage(e: MessageEvent<HostMessage>): void {
     if (!p) return;
     pending.delete(m.requestId);
     clearTimeout(p.timer);
-    p.resolve({ ok: m.ok, ...(m.error ? { error: m.error } : {}) });
+    p.resolve({ ok: m.ok, ...(m.error ? { error: m.error } : {}), ...(m.result ? { result: m.result } : {}) });
   }
 }
 

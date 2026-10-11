@@ -176,6 +176,28 @@ describe('writing (no VS Code running)', () => {
     expect(read('add-login-page-2026-09-01.md').endsWith('## Checkpoint\n')).toBe(true);
   });
 
+  it('log cards: created with --type log, entries added and ticked, not moved without --force', async () => {
+    const created = JSON.parse((await kanban(['new', 'Minor UI bugs', '--type', 'log', '--status', 'todo', '--json'])).stdout);
+    const id = created.path.replace(/^.*\//, '').replace(/\.md$/, '');
+    expect(read(`${id}.md`)).toContain('type: "log"');
+    expect((await kanban(['log', id, '--title', 'Title cut off', '--body', '-'], { stdin: 'Long titles truncate.\n![](/.devtool/assets/x/a.webp)\n' })).code).toBe(EXIT.ok);
+    expect((await kanban(['log', id, '--title', 'Row date column'])).code).toBe(EXIT.ok);
+    expect(read(`${id}.md`)).toMatch(/# Minor UI bugs\n\n- \[ \] \*\*Title cut off\*\*: Long titles truncate\.\n  !\[\]\(\/\.devtool\/assets\/x\/a\.webp\)\n- \[ \] \*\*Row date column\*\*\n$/);
+    expect((await kanban(['log', id, '--done', 'title cut'])).code).toBe(EXIT.ok);
+    expect(read(`${id}.md`)).toContain('- [x] **Title cut off**');
+    const again = await kanban(['log', id, '--done', 'title cut']);
+    expect(again.code).toBe(EXIT.problems);
+    expect(again.stderr).toContain('already done');
+    expect((await kanban(['log', id])).code).toBe(EXIT.usage);
+    const moved = await kanban(['move', id, 'review']);
+    expect(moved.code).toBe(EXIT.refused);
+    expect(moved.stderr).toContain('log card');
+    expect((await kanban(['move', id, 'review', '--force'])).code).toBe(EXIT.ok);
+    expect((await kanban(['new', 'X', '--type', 'ledger'])).code).toBe(EXIT.usage);
+    expect((await kanban(['set', id, 'type='])).code).toBe(EXIT.ok);
+    expect(read(`${id}.md`)).toContain('type: null');
+  });
+
   it('takes a column by its name on the board as well as its status', async () => {
     const policy = { agentsMayMoveCards: 'anywhere' as const, statuses: ['backlog-2', 'todo', 'done'], columnNames: { 'backlog-2': 'Discovery', todo: 'To Do', done: 'Done' } };
     const r = await kanban(['move', 'add-login-page-2026-09-01', 'discovery'], { skillPolicy: policy });

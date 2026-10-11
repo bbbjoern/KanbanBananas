@@ -125,14 +125,20 @@ export class BoardController implements vscode.Disposable {
     return this.write((store) => store.setFields(intent));
   }
 
-  create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<string | null> {
+  /** Resolves to the error message (null when written) and the new card's id. */
+  async create(intent: Omit<CreateIntent, 'top' | 'priority'>): Promise<{ error: string | null; id?: string }> {
     const full = {
       ...intent,
       top: this.settings.view.addNewCardsToTop,
       priority: this.settings.defaultPriority,
       filenamePattern: this.settings.filenamePattern,
     };
-    return this.write((store) => store.create(full));
+    let path: string | undefined;
+    const error = await this.write(async (store) => {
+      path = (await store.create(full)).path;
+    });
+    const id = path?.slice(path.lastIndexOf('/') + 1).replace(/\.md$/, '');
+    return { error, ...(id ? { id } : {}) };
   }
 
   /**

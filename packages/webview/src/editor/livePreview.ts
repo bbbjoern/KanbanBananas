@@ -162,6 +162,15 @@ function build(view: EditorView): DecorationSet {
           if (checked) {
             const line = state.doc.lineAt(node.from);
             if (node.to < line.to) decos.push(markClass('cm-lp-done').range(node.to, line.to));
+            // The whole entry is done: its indented lines (description, screenshots) dim with it.
+            const item = node.node.parent?.parent;
+            if (item?.name === 'ListItem') {
+              for (let pos = line.to + 1; pos <= item.to && pos <= state.doc.length; ) {
+                const l = state.doc.lineAt(pos);
+                decos.push(lineClass('cm-lp-done-item').range(l.from));
+                pos = l.to + 1;
+              }
+            }
           }
         } else if (name === 'QuoteMark' && !isActive(node.from)) {
           const end = state.doc.sliceString(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;

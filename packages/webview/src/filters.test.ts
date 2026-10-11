@@ -14,7 +14,7 @@ function card(id: string, f: Partial<CardView['fields']>): CardView {
     warnings: [],
     fields: {
       id, status: 'todo', priority: 'medium', assignee: null, epic: null, dueDate: null,
-      created: null, modified: null, completedAt: null, labels: [], order: 'a0', lane: null, ...f,
+      created: null, modified: null, completedAt: null, labels: [], order: 'a0', lane: null, type: null, ...f,
     },
   };
 }

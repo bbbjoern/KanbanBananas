@@ -13,7 +13,11 @@ export type IssueCode =
   | 'id-mismatch'
   | 'duplicate-id'
   | 'unknown-status'
-  | 'wrong-folder';
+  | 'wrong-folder'
+  | 'unknown-type';
+
+/** Card types besides an ordinary card (no `type`). */
+export const CARD_TYPES = ['log'] as const;
 
 export interface Issue {
   code: IssueCode;
@@ -56,6 +60,10 @@ export function validateCard(card: Card, at: CardLocation, opts: ValidateOptions
       field: 'id',
       message: `id is "${f.id}" but the filename says "${expectedId}".`,
     });
+  }
+
+  if (f.type !== null && !(CARD_TYPES as readonly string[]).includes(f.type)) {
+    issues.push({ code: 'unknown-type', severity: 'warning', field: 'type', message: `Unknown card type "${f.type}"; shown as an ordinary card. Types: ${CARD_TYPES.join(', ')}.` });
   }
 
   if (f.status !== null && opts.statuses && !opts.statuses.includes(f.status)) {

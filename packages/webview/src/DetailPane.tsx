@@ -93,6 +93,17 @@ export function DetailPane(props: {
           </select>
         </label>
         <label>
+          <span>Type</span>
+          <select
+            value={card.fields.type === 'log' ? 'log' : ''}
+            onChange={(e) => set({ type: e.target.value || null })}
+            title="Log: a running list of entries (e.g. minor bugs) instead of a card for each"
+          >
+            <option value="">Card</option>
+            <option value="log">Log</option>
+          </select>
+        </label>
+        <label>
           <span>Due</span>
           <input type="date" value={card.fields.dueDate?.slice(0, 10) ?? ''} onChange={(e) => set({ dueDate: e.target.value || null })} />
         </label>
@@ -112,6 +123,8 @@ export function DetailPane(props: {
           onEscape={props.onClose}
           images={settings.images ?? { format: 'webp', maxWidth: 0 }}
           assetBase={props.assetBase}
+          log={card.fields.type === 'log'}
+          {...(settings.columns[0] ? { newCardStatus: settings.columns[0].id } : {})}
         />
       </ErrorBoundary>
     </aside>

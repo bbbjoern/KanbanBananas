@@ -34,10 +34,12 @@ Always by this full path, from the project root. There is no plain `kanban` comm
 | `find <id\|text>` | Current path of a card, by id, filename or text in its title |
 | `show <id>` | Path, mtime, frontmatter and body |
 | `ls [--status s] [--label l] [--priority p]` | List cards |
-| `new "<title>" [--status s] [--priority p] [--labels a,b] [--body -]` | Create a card; id, order and timestamps are filled in |
+| `new "<title>" [--status s] [--priority p] [--labels a,b] [--type log] [--body -]` | Create a card; id, order and timestamps are filled in |
 | `note <id> --heading "..." --body -` | Append a `## heading` section to the end of the card. The text always goes in `--body` (`-` reads stdin, as in the examples below); text after the id is refused |
+| `log <id> --title "..." [--body -]` | Add an entry to a log card (see below) |
+| `log <id> --done "<words from the entry>"` | Tick the one open entry containing those words |
 | `move <id> <status> [--before <id> \| --after <id>]` | Change status (moves into or out of `done/` as needed) |
-| `set <id> key=value...` | `priority`, `assignee`, `epic`, `lane`, `dueDate` (YYYY-MM-DD), `labels`. `labels=a,b` sets, `labels=+a,-b` adds/removes, `key=` clears |
+| `set <id> key=value...` | `priority`, `assignee`, `epic`, `lane`, `dueDate` (YYYY-MM-DD), `labels`, `type` (`log`, or empty for an ordinary card). `labels=a,b` sets, `labels=+a,-b` adds/removes, `key=` clears |
 | `edit <id> --body - --expect-mtime <mtime>` | Replace the whole body (everything after the frontmatter); refused if the card changed since `show` |
 | `check` | Integrity scan of the whole board; non-zero exit on problems |
 
@@ -45,6 +47,20 @@ Always by this full path, from the project root. There is no plain `kanban` comm
 
 `--body -` reads the text from stdin; use a heredoc for multi-line text. Every change prints the card's final path and new mtime.
 Columns, in order, as status (name on the board): {{STATUSES}}. The user usually says the name; `move` and `--status` take either.
+
+**A card's Policy.** If a card has a `## Policy` section, it says how to treat that card (e.g. "don't move it, only add entries"). Follow it; it overrides the recipes below for that card.
+
+**Log cards** (`type: log` in the frontmatter, "Log" on the board) are running lists instead of one task, e.g. minor UI bugs. Each entry is one list item, with its description and screenshots indented under it:
+
+```markdown
+- [ ] **Title cut off in Inspector**: long titles truncate at 20 characters
+  ![](/.devtool/assets/<card-id>/2026-10-11-101351.webp)
+```
+
+- Don't create a card for something that belongs in a log; add an entry: `{{KANBAN}} log <id> --title "<short title>" --body - <<'ENTRY' … ENTRY`.
+- When you fix an entry, tick it: `{{KANBAN}} log <id> --done "<words from it>"`, and say in your reply what you changed.
+- Don't move a log card (the CLI refuses without `--force`); don't add Plan/Progress/Done notes to it.
+- If an entry turns out to be real work, tell the user; they can make it its own card from the board ("→ Card").
 
 ## Recipes
 

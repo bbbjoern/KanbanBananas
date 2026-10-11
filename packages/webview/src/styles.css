@@ -1374,3 +1374,65 @@ button {
 .pending-actions .tool {
   border: 1px solid var(--card-border-hover);
 }
+
+/* Log cards: the entry count on the board */
+.log-count {
+  padding: 1px 7px;
+  border: 1px solid var(--card-border-hover);
+  border-radius: 4px;
+  color: var(--muted);
+  line-height: 16px;
+}
+
+/* Entries in the editor */
+.cm-lp-done-item {
+  opacity: 0.55;
+}
+
+.cm-entry-promote {
+  margin-left: 10px;
+  padding: 0 6px;
+  border: 1px solid var(--card-border-hover);
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+
+.cm-entry-promote:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+/* The / menu */
+.inline-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: inherit;
+}
+
+.inline-editor .cm-tooltip.cm-tooltip-autocomplete {
+  border: 1px solid var(--card-border-hover);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 30%);
+  font-size: 12px;
+}
+
+.inline-editor .cm-tooltip-autocomplete > ul > li {
+  padding: 3px 10px !important;
+  color: var(--fg);
+}
+
+.inline-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--fg);
+}
+
+.inline-editor .cm-completionDetail {
+  margin-left: 10px;
+  color: var(--muted);
+  font-style: normal;
+}

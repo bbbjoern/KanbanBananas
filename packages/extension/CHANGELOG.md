@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Log cards** for running lists instead of a card per detail, e.g. minor UI bugs. Set a card's *Type* to *Log* in the split view (it's `type: log` in the frontmatter; cards without it stay ordinary cards). Each entry is one checkbox item with its description and screenshots indented under it, so they can't drift apart. The board shows "Log · 2 open · 1 done" on the card.
+- **Entries as units in the editor:** a screenshot pasted while the cursor is in a list item goes under that item; in a log card, a screenshot pasted on an empty line starts a new entry with the cursor where its description goes. A ticked entry dims as a whole, screenshots included.
+- **Make an entry its own card:** with the cursor in an open entry of a log card, **→ Card** creates a card from it (title from its first line, the rest as body, in the first column) and replaces the entry with a ticked pointer to the new card.
+- **`/` menu** at the start of a line in the editor: *entry*, *dated entry* (for informational logs), *policy* and *heading*.
+- **A card's Policy:** a `## Policy` section says how people and agents should treat the card (e.g. "don't move this card, only add entries"). The agent skill tells agents to follow it.
+- **CLI:** `kanban log <id> --title "…" --body -` adds an entry to a log card, `kanban log <id> --done "<words>"` ticks the one open entry containing them, `kanban new --type log` creates a log card, `kanban set <id> type=log` (or `type=`) changes it. `kanban move` refuses to move a log card unless `--force` is given.
+
 ## 1.5.0 (Preview)
 
 - **Session memory reaches the agent when a Claude Code session starts.** Agents only saw the "read the memory first" rule once something made them load the kanban skill, so a session could start without it. The extension now adds a *SessionStart* hook to the project's `.claude/settings.json` (to `.claude/settings.local.json` when *Personal* is on) that hands the agent the latest entry for a new session, after `/clear` and after compaction. The setting *Session memory: Load at session start* (on by default) turns it off; turning it or session memory off removes the hook again, and nothing else in the file is changed. Needs the agent skill installed; the hook does nothing when the skill or the memory is missing.

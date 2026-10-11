@@ -939,8 +939,9 @@ function CardBody(props: {
   const due = show.dueDate && fields.dueDate ? formatDue(fields.dueDate, new Date()) : null;
   const labels = show.labels ? fields.labels : [];
   const priority = show.priority ? fields.priority : null;
+  const entries = card.entries;
   const hasMeta =
-    priority || labels.length > 0 || due || (show.assignee && fields.assignee) || (show.epic && fields.epic);
+    entries || priority || labels.length > 0 || due || (show.assignee && fields.assignee) || (show.epic && fields.epic);
 
   return (
     <button
@@ -964,6 +965,12 @@ function CardBody(props: {
       {!settings.compactMode && card.excerpt && <div className="excerpt">{card.excerpt}</div>}
       {hasMeta && (
         <div className="meta">
+          {entries && (
+            <span className="log-count" title={`Log card: ${entries.open} open, ${entries.done} done`}>
+              <span aria-hidden>≡</span> Log
+              {entries.open + entries.done > 0 ? ` · ${entries.open} open · ${entries.done} done` : ' · no entries yet'}
+            </span>
+          )}
           {priority && (
             <span className={`priority priority-${priority}`}>
               <span className="pdot" aria-hidden />

@@ -8,12 +8,14 @@ import {
   planCreate,
   planEditBody,
   planMove,
+  planLog,
   planNote,
   planSaveBody,
   planSetFields,
   type Board,
   type CreateIntent,
   type EditBodyIntent,
+  type LogIntent,
   type MoveIntent,
   type NoteIntent,
   type Plan,
@@ -59,6 +61,11 @@ export class CardStore {
 
   note(intent: NoteIntent): Promise<WriteResult> {
     return this.enqueue(() => this.apply(intent.id, (board) => planNote(board, intent, new Date())));
+  }
+
+  /** Add an entry to a log card, or tick one. */
+  log(intent: LogIntent): Promise<WriteResult> {
+    return this.enqueue(() => this.apply(intent.id, (board) => planLog(board, intent, new Date())));
   }
 
   editBody(intent: EditBodyIntent): Promise<WriteResult> {
@@ -192,7 +199,7 @@ export class CardStore {
     if (fm.start !== fm.end || fm.text) {
       edit.replace(doc.uri, new vscode.Range(doc.positionAt(fm.start), doc.positionAt(fm.end)), fm.text);
     }
-    if (plan.append !== undefined || plan.body !== undefined || plan.rebase !== undefined) {
+    if (plan.append !== undefined || plan.body !== undefined || plan.rebase !== undefined || plan.bodyEdit !== undefined) {
       // Everything after the frontmatter edit is body; replace only the part that differs.
       const tail = minimalReplace(current.slice(fm.end), next.slice(fm.start + fm.text.length));
       const offset = fm.end;

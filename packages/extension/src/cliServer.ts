@@ -110,6 +110,8 @@ export class CliServer implements vscode.Disposable {
           return { ok: true, version: this.version, result: await store.note(request.intent) };
         case 'edit':
           return { ok: true, version: this.version, result: await store.editBody(request.intent) };
+        case 'log':
+          return { ok: true, version: this.version, result: await store.log(request.intent) };
         case 'memory':
           return { ok: true, version: this.version, result: await this.memory(request.body) };
         case 'create': {
