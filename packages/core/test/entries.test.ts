@@ -25,9 +25,9 @@ describe('log entries', () => {
     expect(() => entryMarkdown({ title: ' ', text: '' })).toThrow(/needs a title or text/);
   });
 
-  it('adds an entry right under the list, or after a blank line', () => {
+  it('adds an entry after a blank line', () => {
     const added = addEntry('- [ ] one\n  ![](/a.webp)\n', '- [ ] two');
-    expect(added).toBe('- [ ] one\n  ![](/a.webp)\n- [ ] two\n');
+    expect(added).toBe('- [ ] one\n  ![](/a.webp)\n\n- [ ] two\n');
     expect(addEntry('# Log\n\nIntro text.\n', '- [ ] first')).toBe('# Log\n\nIntro text.\n\n- [ ] first\n');
     expect(addEntry('', '- [ ] first')).toBe('- [ ] first\n');
   });

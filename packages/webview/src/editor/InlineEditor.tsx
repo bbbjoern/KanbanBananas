@@ -10,7 +10,7 @@ import { BodySync } from '../bodySync.js';
 import { ACK_TIMEOUT_MS, markDisconnected, onReconnect, request } from '../connection.js';
 import { onHostMessage, vscode } from '../vscode.js';
 import { assetBase, livePreview } from './livePreview.js';
-import { cardFromEntry, entryMenu, imagePlacement, promoteEntry, promoteEntryButton } from './entries.js';
+import { cardFromEntry, entryBlocksView, entryEnter, entryMenu, imagePlacement, logCard, promoteEntry, promoteEntryButton } from './entries.js';
 import { imageFiles, prepareImage } from './pasteImage.js';
 import { taskInput } from './taskInput.js';
 
@@ -130,8 +130,10 @@ export function InlineEditor(props: {
           EditorView.lineWrapping,
           liveMode.current.of(props.live ? livePreview : []),
           entryMenu,
+          entryEnter,
+          entryBlocksView,
           promoteEntryButton,
-          logMode.current.of(props.log ? promoteEntry.of(onPromote) : []),
+          logMode.current.of(props.log ? [logCard.of(true), promoteEntry.of(onPromote)] : []),
           baseConfig.current.of(assetBase.of(props.assetBase)),
           EditorState.readOnly.of(false),
           EditorView.updateListener.of((u) => {
@@ -235,7 +237,7 @@ export function InlineEditor(props: {
         // An ordinary edit: it saves and syncs like typing. Under the entry the cursor is in, or a new entry in a log.
         const pos = Math.min(at, view.state.doc.length);
         const place = imagePlacement(view.state.doc.toString(), pos, m.link, logRef.current);
-        view.dispatch({ changes: { from: place.from, insert: place.insert }, selection: { anchor: place.cursor } });
+        view.dispatch({ changes: { from: place.from, to: place.to ?? place.from, insert: place.insert }, selection: { anchor: place.cursor } });
         return;
       }
       if (!('id' in m) || m.id !== id) return;
@@ -303,7 +305,7 @@ export function InlineEditor(props: {
   }, [props.live]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: logMode.current.reconfigure(props.log ? promoteEntry.of(onPromote) : []) });
+    viewRef.current?.dispatch({ effects: logMode.current.reconfigure(props.log ? [logCard.of(true), promoteEntry.of(onPromote)] : []) });
   }, [props.log, onPromote]);
 
   useEffect(() => {

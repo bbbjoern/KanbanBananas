@@ -182,7 +182,7 @@ describe('writing (no VS Code running)', () => {
     expect(read(`${id}.md`)).toContain('type: "log"');
     expect((await kanban(['log', id, '--title', 'Title cut off', '--body', '-'], { stdin: 'Long titles truncate.\n![](/.devtool/assets/x/a.webp)\n' })).code).toBe(EXIT.ok);
     expect((await kanban(['log', id, '--title', 'Row date column'])).code).toBe(EXIT.ok);
-    expect(read(`${id}.md`)).toMatch(/# Minor UI bugs\n\n- \[ \] \*\*Title cut off\*\*: Long titles truncate\.\n  !\[\]\(\/\.devtool\/assets\/x\/a\.webp\)\n- \[ \] \*\*Row date column\*\*\n$/);
+    expect(read(`${id}.md`).endsWith('# Minor UI bugs\n\n- [ ] **Title cut off**: Long titles truncate.\n  ![](/.devtool/assets/x/a.webp)\n\n- [ ] **Row date column**\n')).toBe(true);
     expect((await kanban(['log', id, '--done', 'title cut'])).code).toBe(EXIT.ok);
     expect(read(`${id}.md`)).toContain('- [x] **Title cut off**');
     const again = await kanban(['log', id, '--done', 'title cut']);

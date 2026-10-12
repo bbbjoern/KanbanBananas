@@ -8,6 +8,8 @@ import { findCard, IntentError, type Plan } from './ops.js';
  *   - [ ] **Title cut off in Inspector**: long titles truncate
  *     ![](/.devtool/assets/<card>/shot.webp)
  *
+ *   - [ ] **Next entry**
+ *
  * Plain markdown; these helpers only count, add and tick them.
  */
 
@@ -17,7 +19,6 @@ export interface EntryCounts {
 }
 
 const TASK = /^[-*+] \[([ xX])\] /;
-const ITEM = /^[-*+] /;
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 
 /** Top-level lines of the body outside code fences, with their index. */
@@ -58,19 +59,10 @@ export function entryMarkdown(entry: { title?: string; text?: string; done?: boo
   return [`- [${entry.done ? 'x' : ' '}] ${head}`, ...rest].join('\n').replace(/\n+$/, '');
 }
 
-/**
- * Add an entry at the end of the body: right under the last entry when the
- * body ends with the list, else after a blank line.
- */
+/** Add an entry at the end of the body, after a blank line (entries are kept apart by one). */
 export function addEntry(body: string, entry: string): string {
   const trimmed = body.replace(/\s+$/, '');
-  if (!trimmed) return entry + '\n';
-  const lines = trimmed.split('\n');
-  // The last top-level line: is it a list item, or a line inside one (indented)?
-  let k = lines.length - 1;
-  while (k > 0 && /^\s+\S/.test(lines[k]!)) k--;
-  const inList = ITEM.test(lines[k]!);
-  return trimmed + (inList ? '\n' : '\n\n') + entry + '\n';
+  return trimmed ? `${trimmed}\n\n${entry}\n` : `${entry}\n`;
 }
 
 /** Tick the one open entry whose text contains `match` (any capitals). */

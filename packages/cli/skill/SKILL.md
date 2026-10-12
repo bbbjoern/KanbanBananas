@@ -55,7 +55,11 @@ Columns, in order, as status (name on the board): {{STATUSES}}. The user usually
 ```markdown
 - [ ] **Title cut off in Inspector**: long titles truncate at 20 characters
   ![](/.devtool/assets/<card-id>/2026-10-11-101351.webp)
+
+- [ ] **Next entry**
 ```
+
+Entries are kept apart by a blank line; everything indented under an entry belongs to it.
 
 - Don't create a card for something that belongs in a log; add an entry: `{{KANBAN}} log <id> --title "<short title>" --body - <<'ENTRY' … ENTRY`.
 - When you fix an entry, tick it: `{{KANBAN}} log <id> --done "<words from it>"`, and say in your reply what you changed.

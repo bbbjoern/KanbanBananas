@@ -32,8 +32,8 @@ if (res.ok) {
     card.entries = { open: 2, done: 1 };
     bodies[card.fields.id] =
       '# Minor UI bugs\n\n## Policy\n\nA running log for minor UI bugs. Don\'t move this card; add entries.\n\n' +
-      '- [ ] **Title cut off in Inspector**: long titles truncate at 20 characters\n' +
-      '- [x] **Row date column**: too narrow, 96 → 120px\n  ![](data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNjAnIGhlaWdodD0nNjAnPjxyZWN0IHdpZHRoPScxNjAnIGhlaWdodD0nNjAnIGZpbGw9JyM0NDUnLz48L3N2Zz4=)\n' +
+      '- [ ] **Title cut off in Inspector**: long titles truncate at 20 characters\n\n' +
+      '- [x] **Row date column**: too narrow, 96 → 120px\n  ![](data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNjAnIGhlaWdodD0nNjAnPjxyZWN0IHdpZHRoPScxNjAnIGhlaWdodD0nNjAnIGZpbGw9JyM0NDUnLz48L3N2Zz4=)\n\n' +
       '- [ ] **Focus frame jumps**: when the description scrolls\n';
   }
   // A fake host for the inline editor: serves bodies and accepts saves.
