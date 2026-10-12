@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.1 (Preview)
 
 - **Log cards: each entry is a block.** In the editor, an entry's lines (title, description, screenshots) share a background and frame, its first line is bold as the title, and entries are kept apart by a blank line, also in the file (`kanban log` writes them that way too).
 - **Log cards: Enter stays in the entry.** Enter adds a line to the entry you're in (indented, so it belongs to it); Enter on an empty line of the entry leaves it. Only `/entry` (or a screenshot pasted on an empty line outside entries) starts a new entry, with a blank line before it. A screenshot pasted inside an entry goes into it. Ordinary cards keep ordinary markdown lists, where Enter starts the next item.
