@@ -16,7 +16,7 @@ import {
   type Mirror,
   type RefusedMessage,
 } from '../src/index.js';
-import { cardDigests, cardHash, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
+import { batches, cardDigests, cardHash, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
 
 /** A hub in-process: the three endpoints, a mirror kept with the same helpers SuperTask will use. */
 class FakeHub {
@@ -144,7 +144,26 @@ async function hub(): Promise<FakeHub> {
   return h;
 }
 
+describe('batches', () => {
+  it('splits by size, keeps order, and lets an oversized item travel alone', () => {
+    const sizes = [300, 300, 500, 1200, 100, 100];
+    expect(batches(sizes, (n) => n, 1000)).toEqual([[300, 300], [500], [1200], [100, 100]]);
+    expect(batches([], (n: number) => n, 1000)).toEqual([]);
+  });
+});
+
 describe('HubClient', () => {
+  it('sends a big board in several requests', async () => {
+    const h = await hub();
+    const files = Array.from({ length: 30 }, (_, i) => file(`big-${i}`, 'x'.repeat(100_000)));
+    const { client } = makeClient(h, () => files);
+    await client.syncOnce();
+    const sends = h.received.filter((m) => m.type === 'cards');
+    expect(sends.length).toBeGreaterThan(1);
+    expect(sends.flatMap((m) => (m.type === 'cards' ? m.cards.map((c) => c.id) : []))).toEqual(files.map((f) => f.path.replace(/\.md$/, '')));
+    expect(mirrorDigests(h.mirror)).toHaveLength(30);
+  });
+
   it('connects with a hello, sends what the hub lacks, then only what changes', async () => {
     const h = await hub();
     let files = [file('a', '1'), file('b', '2', 'done/')];

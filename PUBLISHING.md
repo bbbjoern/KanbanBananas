@@ -14,6 +14,25 @@ Published to the VS Code Marketplace and Open VSX (for Cursor and other VS Code 
    `npx ovsx create-namespace Hypertxtorg -p <token>`.
    For publishing, set `OVSX_PAT=<token>` in your shell (don't commit it).
 
+## Packages for other apps
+
+Apps that host the board or speak the hub protocol (SuperTask) install two packages from
+GitHub Packages, published by `scripts/publish-packages.mjs` under the repository owner's
+scope, as GitHub Packages requires: `@bbbjoern/kanban-bananas-core` (the `packages/core`
+build, `dist/` and `src/`) and `@bbbjoern/kanban-bananas-webview` (the board bundle,
+`index.js` and `index.css`). The release script publishes both with the release version;
+it needs `NODE_AUTH_TOKEN` set to a GitHub token with `write:packages`. Between releases,
+publish a prerelease by hand when a consumer needs a change early (it goes under the `dev`
+dist-tag; consumers pin exact versions):
+
+```sh
+NODE_AUTH_TOKEN=<token> node scripts/publish-packages.mjs core --version 1.7.0-dev.2
+```
+
+A consumer aliases the package back to its workspace name, for example in SuperTask's
+package.json: `"@kanban-bananas/core": "npm:@bbbjoern/kanban-bananas-core@1.7.0-dev.1"`,
+with `@bbbjoern:registry=https://npm.pkg.github.com` in its `.npmrc`.
+
 ## Between releases
 
 Note every user-visible change under **`## Unreleased`** at the top of

@@ -114,6 +114,8 @@ export class HubRequestError extends Error {
 
 /** How long an intent's answer is kept, so a repeat gets the same one. */
 const ANSWER_TTL_MS = 5 * 60_000;
+/** Card texts go up in requests of about this many bytes, so a big board fits a hub's body limit. */
+export const HUB_BATCH_BYTES = 512 * 1024;
 const READ_ONLY = 'This client is read-only; open the project in VS Code to apply changes.';
 
 export class HubClient {
@@ -233,7 +235,7 @@ export class HubClient {
     this.session = answer.session;
     const byId = new Map(texts.map((c) => [c.id, c]));
     const cards = answer.need.map((id) => byId.get(id)).filter((c): c is NonNullable<typeof c> => c !== undefined);
-    if (cards.length > 0) await this.post(HUB_PATHS.events, { messages: [{ type: 'cards', cards }] });
+    for (const batch of batches(cards, (c) => c.text.length)) await this.post(HUB_PATHS.events, { messages: [{ type: 'cards', cards: batch }] });
     this.sent.clear();
     for (const c of texts) this.sent.sent(c.id, c.hash);
     this.current = { ...this.current, lastSyncAt: Date.now(), cards: texts.length };
@@ -252,7 +254,7 @@ export class HubClient {
     }
     for (const id of this.sent.ids()) if (!live.has(id)) messages.push({ type: 'deleted', id });
     if (messages.length === 0) return;
-    await this.post(HUB_PATHS.events, { messages });
+    for (const batch of batches(messages, (m) => ('card' in m ? m.card.text.length : 0))) await this.post(HUB_PATHS.events, { messages: batch });
     for (const m of messages) {
       if (m.type === 'deleted') this.sent.forget(m.id);
       else if (m.type === 'changed' || m.type === 'created') this.sent.sent(m.card.id, m.card.hash);
@@ -433,6 +435,25 @@ export class HubClient {
 
 function describe(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** Split items into runs of at most `HUB_BATCH_BYTES` by `size`; an item larger than that goes alone. */
+export function batches<T>(items: readonly T[], size: (item: T) => number, limit = HUB_BATCH_BYTES): T[][] {
+  const out: T[][] = [];
+  let current: T[] = [];
+  let bytes = 0;
+  for (const item of items) {
+    const n = size(item);
+    if (current.length > 0 && bytes + n > limit) {
+      out.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(item);
+    bytes += n;
+  }
+  if (current.length > 0) out.push(current);
+  return out;
 }
 
 /** The `data` of each server-sent event, as the stream delivers them. `onChunk` runs for every chunk read. */

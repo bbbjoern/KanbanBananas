@@ -120,10 +120,14 @@ else {
 
 // --- Commit, tag, push ------------------------------------------------------------------
 
+// The packages other apps build on go out with the same version (scripts/publish-packages.mjs).
+if (!process.env.NODE_AUTH_TOKEN) fail('NODE_AUTH_TOKEN is not set: the release publishes @bbbjoern/kanban-bananas-core and -webview to GitHub Packages and needs a token with write:packages.');
+
 run('Commit', 'git', ['add', '-A']);
 run(`Commit ${version}`, 'git', ['commit', '-q', '-m', `Release ${version}`]);
 run(`Tag ${tag}`, 'git', ['tag', '-a', tag, '-m', `KanbanBananas ${version}`]);
 run('Push commit and tag', 'git', ['push', 'origin', branch, '--follow-tags']);
+run('Publish core and webview to GitHub Packages', 'node', ['scripts/publish-packages.mjs', 'core', 'webview', '--version', version]);
 
 console.log(`\n✓ ${version} is committed, tagged ${tag} and pushed.`);
 console.log(`  Upload ${existsSync(vsixPath) ? 'packages/extension/kanban-bananas.vsix' : 'the package'} on the Marketplace manage page (⋯ → Update),`);
