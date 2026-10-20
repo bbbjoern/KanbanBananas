@@ -32,7 +32,8 @@ export type Mirror = Map<string, CardText>;
 /**
  * Apply one client message to the hub's copy. `hello` drops the cards that are
  * gone (the texts it needs arrive as `cards`); the rest set or delete entries.
- * Messages that carry no card text (`columns`, `ack`) change nothing here.
+ * An ack carries the card as the client wrote it (or as it is now, when it
+ * refused), which is newer than anything in the mirror. `columns` changes nothing here.
  */
 export function applyToMirror(mirror: Mirror, message: ClientMessage): void {
   switch (message.type) {
@@ -53,8 +54,12 @@ export function applyToMirror(mirror: Mirror, message: ClientMessage): void {
     case 'deleted':
       mirror.delete(message.id);
       return;
-    case 'columns':
     case 'ack':
+      // The card as written (or as it is now, on a refusal) is the latest text the client saw.
+      if (message.ack.ok && message.ack.from) mirror.delete(message.ack.from);
+      if (message.ack.card) mirror.set(message.ack.card.id, message.ack.card);
+      return;
+    case 'columns':
       return;
   }
 }
@@ -120,6 +125,16 @@ export class SentHashes {
   /** The hub no longer holds the card (deleted or renamed away). */
   forget(id: string): void {
     this.hashes.delete(id);
+  }
+
+  /** Does the hub hold any version of this card? */
+  has(id: string): boolean {
+    return this.hashes.has(id);
+  }
+
+  /** Ids the hub holds. */
+  ids(): string[] {
+    return [...this.hashes.keys()];
   }
 
   /** Start over, e.g. before a `hello` that resends everything. */

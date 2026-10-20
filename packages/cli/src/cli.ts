@@ -39,6 +39,7 @@ import {
   writeAtomic,
 } from '@kanban-bananas/core/node';
 import { sendToExtension } from './client.js';
+import { runSync } from './sync.js';
 import { findProject, UsageError, type Project } from './project.js';
 
 declare const KANBAN_VERSION: string;
@@ -52,6 +53,8 @@ export interface Io {
   readStdin: () => Promise<string>;
   /** The policy installed with the skill (policy.json next to SKILL.md), if any. */
   skillPolicy?: SkillPolicy;
+  /** Ends a long-running command such as `sync` (Ctrl-C). */
+  signal?: AbortSignal;
 }
 
 /** Exit codes, for scripts and hooks. */
@@ -79,6 +82,9 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban memory --body -|text             Save the current state of the work as the newest entry
   kanban memory --from-card <id>          Save a card's text as the newest entry (the card stays)
   kanban memory --session-start           The latest entry with a short intro, for Claude Code's SessionStart hook
+  kanban sync [--once] [--hub <url>]      Keep a project hub's copy of the board current (read-only; VS Code applies
+                                          the hub's changes). URL also from KANBAN_HUB_URL; token from KANBAN_HUB_TOKEN
+                                          or KANBAN_HUB_TOKEN_FILE. --once syncs and exits.
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -145,6 +151,13 @@ export async function run(argv: string[], io: Io): Promise<number> {
         return await ctx.edit(need(rest[0], 'edit <id> --body - --expect-mtime <t>'));
       case 'memory':
         return await ctx.memory();
+      case 'sync':
+        await runSync(project, { env: io.env, stdout: io.stdout, stderr: io.stderr, ...(io.signal ? { signal: io.signal } : {}) }, {
+          hub: str(args.flags.hub),
+          once: args.flags.once === true,
+          version: VERSION,
+        });
+        return EXIT.ok;
       default:
         throw new UsageError(`Unknown command "${command}".`);
     }
@@ -593,6 +606,7 @@ const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string
   set: { args: [1, Infinity], flags: [] },
   edit: { args: [1, 1], flags: ['body', 'expect-mtime'] },
   memory: { args: [0, 0], flags: ['body', 'from-card', 'all', 'session-start'] },
+  sync: { args: [0, 0], flags: ['once', 'hub'] },
 };
 
 function checkArgs(command: string, rest: string[], flags: Args['flags']): void {
@@ -619,7 +633,7 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start']);
+const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start', 'once']);
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];

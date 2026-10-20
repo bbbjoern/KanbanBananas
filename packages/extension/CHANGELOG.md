@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Project hub (opt-in, off by default).** The setting *Project hub: URL* (`kanbanBananas.hub.url`) connects the board to a hub that shows it outside VS Code (SuperTask is the first); *KanbanBananas: Project Hub: Set Token…* stores the machine token in VS Code's secret storage. The extension stays the only writer: it sends the cards and their changes to the hub (a content hash per card is the version; a reconcile on every connect repairs anything missed), and every change the hub asks for goes through the same path as the board, or is refused with the card as it is now when a field it depends on changed meanwhile. The status bar shows the connection; *Project Hub: Status* offers reconnect, token and log. With the URL empty nothing leaves the machine and nothing else changes.
+- **`kanban sync [--once] [--hub <url>]`** keeps the hub current from a machine where VS Code is not open (a server, a cron job). It is read-only, waits while the extension runs in the project, and takes the token from `KANBAN_HUB_TOKEN` or `KANBAN_HUB_TOKEN_FILE`, never from the command line. The agent skill does not mention it; it is a command for people and scripts.
+
 ## 1.6.1 (Preview)
 
 - **Log cards: each entry is a block.** In the editor, an entry's lines (title, description, screenshots) share a background and frame, its first line is bold as the title, and entries are kept apart by a blank line, also in the file (`kanban log` writes them that way too).

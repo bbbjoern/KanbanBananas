@@ -69,6 +69,8 @@ kanban memory --body - < status.md          # …or save the current state as th
 
 While VS Code is running, CLI changes go through the extension (including into open editors); otherwise the CLI writes atomically itself. Every change reports its route: `disk`, `editor-saved` or `editor-unsaved`.
 
+`kanban sync [--once] [--hub <url>]` keeps a project hub's copy of the board current from a machine where VS Code is not open (see the extension's README, "Project hub"). It is read-only and takes its token from `KANBAN_HUB_TOKEN` or `KANBAN_HUB_TOKEN_FILE`; `--once` syncs and exits, for scripts and cron. The agent skill doesn't document it: it is for people and scripts, not agents.
+
 ## Repository layout
 
 ```

@@ -22,9 +22,21 @@ import type { ColumnConfig } from './view.js';
  * Both sides compile against this file. `HUB_PROTOCOL_VERSION` goes up on any
  * change a peer built from the old file couldn't handle; `hello` carries it and
  * a mismatch is refused with a message that says which side to update.
+ *
+ * Over HTTP (`HUB_PATHS`, relative to the hub URL, bearer token on every request):
+ * - `POST hello` with a `HelloMessage` answers `welcome` (200) or `refused`
+ *   (4xx with the JSON; a 401/403 without one is a bad token).
+ * - `POST events` with `{ messages: ClientMessage[] }`; acks travel here too.
+ * - `GET stream` is a server-sent event stream of `HubMessage`s, one JSON
+ *   object per `data:` line; comment lines keep the connection alive.
+ * `welcome.session` names the connection; `events` and `stream` carry it in
+ * the `X-Hub-Session` header so the hub knows which repo they belong to.
  */
 
 export const HUB_PROTOCOL_VERSION = 1;
+
+export const HUB_PATHS = { hello: 'hello', events: 'events', stream: 'stream' } as const;
+export const HUB_SESSION_HEADER = 'x-hub-session';
 
 /** Which board this is: the git remote as `normalizeRemote` writes it, and the features directory inside the repo. */
 export interface RepoIdentity {
@@ -75,7 +87,7 @@ export type ClientMessage =
   | { type: 'renamed'; from: string; card: CardText }
   | { type: 'deleted'; id: string }
   | { type: 'columns'; columns: ColumnConfig[] }
-  /** What became of an intent. */
+  /** What became of an intent. The hub takes the card in it as the card's current text. */
   | { type: 'ack'; ack: IntentAck };
 
 export type RefusalCode = 'protocol' | 'repo' | 'token';
@@ -89,8 +101,17 @@ export type RefusedMessage = {
 };
 
 /** Hub → client. `welcome` and `refused` answer a `hello`; the rest arrive on the stream. */
+export type WelcomeMessage = {
+  type: 'welcome';
+  protocol: number;
+  /** The hub's handle for this connection, sent back with events and the stream. */
+  session: string;
+  /** Ids whose text the hub lacks or holds in another version. */
+  need: string[];
+};
+
 export type HubMessage =
-  | { type: 'welcome'; protocol: number; /** Ids whose text the hub lacks or holds in another version. */ need: string[] }
+  | WelcomeMessage
   | RefusedMessage
   | { type: 'intent'; intent: HubIntent }
   /** Send `hello` again: the hub lost its state, or it is time for the periodic reconcile. */
@@ -110,6 +131,8 @@ export type Expectation = Partial<Record<KnownField, FieldValue>>;
  * the version of the card the hub showed when the intent was made (null for
  * `create`); the hub uses it for its bookkeeping, the client decides by
  * `expect`, the three-way merge (`saveBody`) or nothing at all (`note` appends).
+ * An ack can be lost with the connection, so the hub sends every intent it has
+ * no ack for again on the next stream; the client answers a repeat as before.
  */
 export type HubIntent = { intentId: string; baseHash: string | null } & (
   | { op: 'move'; intent: MoveIntent; expect: Expectation }

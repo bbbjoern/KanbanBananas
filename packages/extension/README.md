@@ -87,7 +87,11 @@ The format is plain frontmatter plus markdown, so existing boards in this layout
 
 ## Settings
 
-Open them from the ⚙ on the board. They're grouped into **Board** (folder, columns, layout, compact mode), **Cards** (which fields cards show), **New cards** (top or bottom, default column and priority, filename pattern), **Swimlanes** (order and colours), **Images** (format, maximum width, folder) and **Agents** (how far agents may move cards, skill location and updates).
+Open them from the ⚙ on the board. They're grouped into **Board** (folder, columns, layout, compact mode), **Cards** (which fields cards show), **New cards** (top or bottom, default column and priority, filename pattern), **Swimlanes** (order and colours), **Images** (format, maximum width, folder), **Agents** (how far agents may move cards, skill location and updates), **Session memory** and **Project hub**.
+
+## Project hub (optional)
+
+A project hub shows the board outside VS Code, for example in a project-management app that gathers the boards of several repositories. It is off until you set **Project hub: URL** and store the machine token the hub gave you with **KanbanBananas: Project Hub: Set Token…** (the token goes into VS Code's secret storage, not into the settings). The files stay the truth and the extension stays the only writer: it sends the cards to the hub as they change, and a change made in the hub comes back as a request that goes through the same path as the board, or is refused when the card changed meanwhile. The status bar shows the connection. On a machine where VS Code is not open, `kanban sync` does the sending (read-only).
 
 ## Works remotely
 

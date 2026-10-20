@@ -45,6 +45,14 @@ describe('applyToMirror', () => {
     expect(mirrorDigests(mirror)).toEqual([digest(card('a', '1 edited')), digest(card('b-2', '2', 'done/'))]);
   });
 
+  it('takes the card in an ack as its latest text, and drops the old id of a renaming write', () => {
+    const mirror: Mirror = new Map([['a', card('a', '1')], ['b', card('b', '2')]]);
+    applyToMirror(mirror, { type: 'ack', ack: { intentId: 'i', ok: true, route: 'disk', card: card('a-2', '1 moved', 'done/'), from: 'a' } });
+    applyToMirror(mirror, { type: 'ack', ack: { intentId: 'j', ok: false, code: 'stale', error: 'x', card: card('b', '2 by someone else') } });
+    applyToMirror(mirror, { type: 'ack', ack: { intentId: 'k', ok: false, code: 'gone', error: 'x' } });
+    expect(mirrorDigests(mirror)).toEqual([digest(card('b', '2 by someone else')), digest(card('a-2', '1 moved', 'done/'))]);
+  });
+
   it('drops what a hello no longer lists and keeps the rest until their texts arrive', () => {
     const mirror: Mirror = new Map([['a', card('a', '1')], ['b', card('b', '2')]]);
     applyToMirror(mirror, hello([digest(card('b', '2 changed')), digest(card('c', '3'))]));
@@ -184,10 +192,13 @@ describe('SentHashes', () => {
     expect(sent.shouldSend('a', 'h2')).toBe(true);
     expect(sent.shouldSend('b', 'h1')).toBe(true);
     sent.forget('a');
+    expect(sent.has('a')).toBe(false);
     expect(sent.shouldSend('a', 'h1')).toBe(true);
     sent.sent('a', 'h1');
     sent.sent('b', 'h1');
     expect(sent.size).toBe(2);
+    expect(sent.ids().sort()).toEqual(['a', 'b']);
+    expect(sent.has('b')).toBe(true);
     sent.clear();
     expect(sent.size).toBe(0);
     expect(sent.shouldSend('a', 'h1')).toBe(true);

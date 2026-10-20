@@ -1,4 +1,4 @@
-import { DONE_STATUS, labelCounts, loadBoard, MEMORY_EDITOR_ID, parseCard, planRenameToPattern, relabel, searchCards, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
+import { DONE_STATUS, labelCounts, loadBoard, MEMORY_EDITOR_ID, parseCard, planRenameToPattern, relabel, searchCards, type BoardFile, type GroupField, type ColumnConfig, type LaneDef, type PatternRename, type CreateIntent, type HostMessage, type MoveIntent, type SaveBodyIntent, type SetFieldsIntent } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 import { BoardSource } from './boardSource.js';
 import { CardStore } from './cardStore.js';
@@ -21,6 +21,9 @@ export class BoardController implements vscode.Disposable {
   private problem: string | undefined;
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChange = this.changed.event;
+  private readonly started = new vscode.EventEmitter<void>();
+  /** `start()` finished: the board was (re)loaded, or there is none. */
+  readonly onDidStart = this.started.event;
   private readonly subs: vscode.Disposable[] = [];
   /** Errors reported by board webviews, and cards the split view showed. Read by integration tests. */
   readonly clientErrors: string[] = [];
@@ -71,6 +74,7 @@ export class BoardController implements vscode.Disposable {
     if (!root) {
       this.problem = `No "${this.settings.featuresDirectory}" folder in this workspace.`;
       this.changed.fire();
+      this.started.fire();
       return;
     }
     const source = new BoardSource(root, () => this.settings.view.columns.map((c) => c.id));
@@ -90,6 +94,7 @@ export class BoardController implements vscode.Disposable {
       server.dispose();
       log.warn(`CLI socket not available, the CLI will write files directly: ${e instanceof Error ? e.message : String(e)}`);
     }
+    this.started.fire();
   }
 
   /** Board state, with the session memory summary when it's on. */
@@ -115,6 +120,11 @@ export class BoardController implements vscode.Disposable {
   /** The current board, for commands that need to look up cards. */
   board() {
     return this.source?.board();
+  }
+
+  /** Every card file as the board sees it (an open buffer's text counts), for the hub. */
+  boardFiles(): BoardFile[] {
+    return this.source?.boardFiles() ?? [];
   }
 
   move(intent: MoveIntent): Promise<string | null> {
@@ -401,6 +411,7 @@ export class BoardController implements vscode.Disposable {
     this.sourceSub?.dispose();
     this.source?.dispose();
     this.changed.dispose();
+    this.started.dispose();
     for (const s of this.subs) s.dispose();
   }
 }

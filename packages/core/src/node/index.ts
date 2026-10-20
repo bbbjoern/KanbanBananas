@@ -2,3 +2,5 @@
 export * from './atomicFile.js';
 export * from './fileStore.js';
 export * from './cardHash.js';
+export * from './gitRemote.js';
+export * from './hubClient.js';

@@ -30,7 +30,11 @@ function readSkillPolicy(): SkillPolicy | undefined {
 }
 
 const skillPolicy = readSkillPolicy();
+// Ctrl-C ends a long-running command (`sync`) cleanly instead of killing it mid-request.
+const stop = new AbortController();
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => stop.abort());
 process.exitCode = await run(process.argv.slice(2), {
+  signal: stop.signal,
   cwd: process.cwd(),
   env: process.env,
   stdout: (s) => process.stdout.write(s),

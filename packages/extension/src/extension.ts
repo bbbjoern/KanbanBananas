@@ -6,6 +6,7 @@ import { registerCardCommands } from './cardCommands.js';
 import { BoardController } from './controller.js';
 import { registerDiffProvider } from './diffView.js';
 import { registerBoardCommands } from './boardCommands.js';
+import { HubHost } from './hub.js';
 import { registerLabelCommands } from './labelCommands.js';
 import { registerImagePasteAndDrop } from './images.js';
 import { storeImagesWithLfs } from './lfs.js';
@@ -32,6 +33,9 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const controller = new BoardController(String(context.extension.packageJSON.version));
   context.subscriptions.push(controller);
   const version = String(context.extension.packageJSON.version);
+  // The project hub, only when `kanbanBananas.hub.url` is set; it listens for the board to load.
+  const hub = new HubHost(controller, context.secrets, version);
+  context.subscriptions.push(hub);
   const ready = controller.start();
   // The skill check runs once a board exists: now, or after the board is created on first run.
   const afterBoardReady = async () => {
@@ -112,6 +116,10 @@ export function activate(context: vscode.ExtensionContext): ExtensionApi {
     }),
 
     vscode.commands.registerCommand('kanbanBananas.showLog', () => log.show()),
+
+    vscode.commands.registerCommand('kanbanBananas.hub.setToken', () => hub.setToken()),
+    vscode.commands.registerCommand('kanbanBananas.hub.clearToken', () => hub.clearToken()),
+    vscode.commands.registerCommand('kanbanBananas.hub.status', () => hub.showStatus()),
 
     registerImagePasteAndDrop(controller, controller.images),
 

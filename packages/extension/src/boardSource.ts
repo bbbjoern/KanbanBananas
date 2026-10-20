@@ -1,4 +1,4 @@
-import { loadBoard, toBoardView, type Board, type BoardView } from '@kanban-bananas/core';
+import { loadBoard, toBoardView, type Board, type BoardFile, type BoardView } from '@kanban-bananas/core';
 import * as vscode from 'vscode';
 
 /** Card files are `<root>/*.md` and `<root>/done/*.md`. `archived/` is not on the board. */
@@ -113,9 +113,13 @@ export class BoardSource implements vscode.Disposable {
     return vscode.Uri.joinPath(this.root, ...path.split('/'));
   }
 
+  /** Every card file with its current text, sorted by path. */
+  boardFiles(): BoardFile[] {
+    return [...this.files].map(([path, text]) => ({ path, text })).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  }
+
   board(): Board {
-    const files = [...this.files].map(([path, text]) => ({ path, text }));
-    return loadBoard(files, { statuses: this.statuses() });
+    return loadBoard(this.boardFiles(), { statuses: this.statuses() });
   }
 
   view(): BoardView {

@@ -200,6 +200,21 @@
         "command": "kanbanBananas.card.copyPath",
         "title": "Copy Card Path",
         "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.hub.setToken",
+        "title": "Project Hub: Set Token\u2026",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.hub.clearToken",
+        "title": "Project Hub: Clear Token",
+        "category": "KanbanBananas"
+      },
+      {
+        "command": "kanbanBananas.hub.status",
+        "title": "Project Hub: Status",
+        "category": "KanbanBananas"
       }
     ],
     "viewsContainers": {
@@ -774,6 +789,16 @@
             "type": "boolean",
             "default": true,
             "markdownDescription": "Hand agents the session memory when a Claude Code session starts, without relying on them to read it: adds a *SessionStart* hook to the project's `.claude/settings.json` (to `.claude/settings.local.json` when *Personal* is on) that runs the skill's `kanban memory`. Needs the agent skill installed. Turning this or session memory off removes the hook again; nothing else in the file is changed."
+          }
+        }
+      },
+      {
+        "title": "KanbanBananas: Project hub",
+        "properties": {
+          "kanbanBananas.hub.url": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "URL of a **project hub** that shows this board outside VS Code and sends changes back as requests (for example SuperTask's `https://\u2026/api/hub`). Empty (the default) means off: nothing leaves this machine. With a URL set, run *KanbanBananas: Project Hub: Set Token\u2026* to store the machine token the hub gave you; it goes into VS Code's secret storage, never into the settings. The extension stays the only writer: the hub keeps a copy of the cards, and every change it asks for goes through the same path as the board, or is refused when the card changed meanwhile."
           }
         }
       }
