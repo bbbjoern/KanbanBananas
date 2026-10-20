@@ -16,3 +16,5 @@ export * from './memory.js';
 export * from './textDiff.js';
 export * from './claudeHook.js';
 export * from './entries.js';
+export * from './hubProtocol.js';
+export * from './hubSync.js';
