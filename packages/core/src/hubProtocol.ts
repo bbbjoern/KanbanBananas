@@ -37,14 +37,17 @@ import type { ColumnConfig } from './view.js';
  *   the cards refer to (`HelloMessage.assets`); it answers 200 with
  *   `{ path, hash, size }`, 413 when too large, 415 when not an image the hub
  *   takes. Only after a `welcome` that says `assets: true`.
- * `welcome.session` names the connection; `events`, `stream` and `assets`
- * carry it in the `X-Hub-Session` header so the hub knows which repo they
- * belong to.
+ * - `GET uploads/<id>` answers with the bytes of an image pasted on the hub's
+ *   board (a `saveImage` intent names it), `Content-Type` the image's; 404
+ *   once the hub no longer holds it. Only for the repo the session names.
+ * `welcome.session` names the connection; `events`, `stream`, `assets` and
+ * `uploads` carry it in the `X-Hub-Session` header so the hub knows which
+ * repo they belong to.
  */
 
 export const HUB_PROTOCOL_VERSION = 1;
 
-export const HUB_PATHS = { hello: 'hello', events: 'events', stream: 'stream', assets: 'assets' } as const;
+export const HUB_PATHS = { hello: 'hello', events: 'events', stream: 'stream', assets: 'assets', uploads: 'uploads' } as const;
 export const HUB_SESSION_HEADER = 'x-hub-session';
 
 /**
@@ -133,6 +136,13 @@ export type HelloMessage = {
   assets?: AssetDigest[];
   /** With `assets`: how this board stores pasted images. */
   images?: HubImageSettings;
+  /**
+   * The client takes images pasted on the hub's board: it applies `saveImage`
+   * intents by fetching the upload (`GET uploads/<id>`) and writing the file
+   * under the images folder, and acks with the `link` the card should get.
+   * Never from a read-only client. A hub without the feature ignores it.
+   */
+  uploads?: true;
 };
 
 /** Client → hub. */
@@ -205,7 +215,27 @@ export type HubIntent = { intentId: string; baseHash: string | null } & (
   | { op: 'create'; intent: CreateIntent }
   | { op: 'saveBody'; intent: SaveBodyIntent }
   | { op: 'note'; intent: NoteIntent }
+  | { op: 'saveImage'; intent: SaveImageIntent }
 );
+
+/**
+ * An image pasted into a card on the hub's board (`HelloMessage.uploads`):
+ * the hub holds the bytes as `upload` until the machine has fetched them
+ * (`GET uploads/<id>`), checked `hash` (SHA-256, hex) and `size`, and written
+ * the file for card `id` as a paste in VS Code would (`CardImages.save`: the
+ * images folder, the card's subfolder, a timestamp name, never overwriting).
+ * The ack carries the `link` the card gets; the hub moves the bytes under
+ * that path, so the board shows the image as soon as the editor inserts it.
+ */
+export interface SaveImageIntent {
+  id: string;
+  /** One of `HUB_ASSET_EXTENSIONS`. */
+  ext: string;
+  hash: string;
+  size: number;
+  /** The hub's id for the bytes. */
+  upload: string;
+}
 
 export type HubIntentOp = HubIntent['op'];
 
@@ -227,6 +257,8 @@ export type IntentAck = { intentId: string } & (
       route: WriteRoute;
       /** The id the card had before, when the write renamed it (a clash on a move into `done/`). */
       from?: string;
+      /** For `saveImage`: the link the card should get (`/.devtool/assets/<card>/<file>`), as `imageLink` spells it. */
+      link?: string;
     }
   | { ok: false; code: AckErrorCode; error: string; /** The card as it is now, when it exists. */ card?: CardText }
 );

@@ -1,5 +1,5 @@
 import { BodyConflictError, idForFilename, IntentError, PatchError, staleFields, type CardText, type HubIntent, type IntentAck } from '@kanban-bananas/core';
-import { cardHash, ConflictError, fsAssetSource, HubClient, repoIdentityFor, type HubStatus, type WriteResult } from '@kanban-bananas/core/node';
+import { cardHash, ConflictError, fsAssetSource, HubClient, repoIdentityFor, type HubStatus, type SaveImageHubIntent, type WriteResult } from '@kanban-bananas/core/node';
 import * as vscode from 'vscode';
 import type { BoardController } from './controller.js';
 import { log } from './log.js';
@@ -10,8 +10,9 @@ import { SECTION } from './settings.js';
  * the hub, the token lives in VS Code's secret storage. With the URL unset
  * (the default) nothing here runs. The HubClient in core does the talking;
  * this host feeds it the board, applies its intents through the CardStore
- * (open editors, atomic writes and the three-way merge all honoured) and
- * shows the state in the status bar.
+ * (open editors, atomic writes and the three-way merge all honoured), writes
+ * the images pasted on the hub's board through CardImages (as a paste here
+ * would) and shows the state in the status bar.
  */
 export class HubHost implements vscode.Disposable {
   private client: HubClient | undefined;
@@ -87,6 +88,7 @@ export class HubHost implements vscode.Disposable {
       columns: () => this.controller.settingsNow.view.columns,
       files: () => this.controller.boardFiles(),
       apply: (intent) => this.apply(intent),
+      saveImage: (intent, bytes) => this.saveImage(intent, bytes),
       fieldsOnly: !this.shareText(),
       ...(folder ? { assets: fsAssetSource(folder.uri.fsPath, { folder: s.imagesFolder, ...s.view.images }) } : {}),
       log: { info: (m) => log.info(m), warn: (m) => log.warn(m), error: (m) => log.error(m) },
@@ -207,6 +209,9 @@ export class HubHost implements vscode.Disposable {
           result = await store.create({ top: s.view.addNewCardsToTop, priority: s.defaultPriority, filenamePattern: s.filenamePattern, ...intent.intent });
           break;
         }
+        case 'saveImage':
+          // The client hands these to saveImage() with the bytes; never here.
+          return fail('error', 'An image is applied through saveImage.');
       }
       const card = this.cardText(result.path);
       if (!card) return fail('error', `${result.path} could not be read after writing.`);
@@ -219,6 +224,29 @@ export class HubHost implements vscode.Disposable {
       if (e instanceof ConflictError) return fail('stale', error, path);
       if (e instanceof IntentError || e instanceof PatchError) return fail('invalid', error);
       return fail('error', error);
+    }
+  }
+
+  /**
+   * An image pasted into a card on the hub's board, with its bytes fetched
+   * and checked by the client: written as a paste here would be (the images
+   * folder, the card's subfolder, a timestamp name, never overwriting), and
+   * acked with the link the card gets. The card itself is unchanged: the
+   * editor on the hub's board inserts the link and saves the body.
+   */
+  private async saveImage(intent: SaveImageHubIntent, bytes: Uint8Array): Promise<IntentAck> {
+    const board = this.controller.board();
+    const fail = (code: Extract<IntentAck, { ok: false }>['code'], error: string): IntentAck => ({ intentId: intent.intentId, ok: false, code, error });
+    if (!board) return fail('error', 'The board is not loaded.');
+    const card = board.cards.find((c) => c.card.fields.id === intent.intent.id);
+    if (!card) return fail('gone', `No card "${intent.intent.id}" on the board.`);
+    try {
+      const link = await this.controller.images.save(intent.intent.id, bytes, intent.intent.ext);
+      const text = this.cardText(card.path);
+      if (!text) return fail('error', `${card.path} could not be read.`);
+      return { intentId: intent.intentId, ok: true, card: text, route: 'disk', link };
+    } catch (e) {
+      return fail('error', e instanceof Error ? e.message : String(e));
     }
   }
 

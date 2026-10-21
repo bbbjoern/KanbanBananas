@@ -255,6 +255,13 @@ export interface BoardHostOptions {
   mode?: 'vscode' | 'hub';
   /** The page's CSP nonce, for the style elements the editor adds to the document. */
   cspNonce?: string;
+  /**
+   * Hub mode: the host takes an image pasted or dropped into the editor
+   * (`saveImage`, answered with `imageSaved` or `imageError` as in VS Code)
+   * and passes it on to the machine. Without it the editor refuses the paste
+   * and says images are added in VS Code.
+   */
+  images?: boolean;
 }
 
 const EXCERPT_LENGTH = 160;

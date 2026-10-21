@@ -17,6 +17,9 @@ import {
   type RepoIdentity,
   type WelcomeMessage,
 } from '../hubProtocol.js';
+
+/** The `saveImage` intent as the host sees it. */
+export type SaveImageHubIntent = Extract<HubIntent, { op: 'saveImage' }>;
 import { assetMediaType, assetRefs, fieldsOnlyText, SentHashes } from '../hubSync.js';
 import type { ColumnConfig } from '../view.js';
 import type { HubAssetSource } from './assetSource.js';
@@ -42,8 +45,12 @@ import { cardTexts } from './cardHash.js';
  *   a hello, and the ones a changed card newly refers to, before the card.
  *   Never with `fieldsOnly`. A hub that refuses one (too large, not an image)
  *   is not asked again until the file changes.
+ * - An image pasted on the hub's board comes down as a `saveImage` intent:
+ *   the client fetches the bytes (`GET uploads/<id>`), checks them against
+ *   the intent, and the host writes the file and names the link in the ack.
+ *   Only when the host passes `saveImage`; the hello says so (`uploads`).
  * - No files, no settings: the host passes `files()`, `columns()`, `apply()`
- *   and, for images, `assets`.
+ *   and, for images, `assets` and `saveImage`.
  */
 
 export interface HubEndpoint {
@@ -110,6 +117,13 @@ export interface HubClientOptions {
   files: () => Promise<readonly BoardFile[]> | readonly BoardFile[];
   /** Apply an intent and answer with the card as written. Without it every intent is refused as read-only. */
   apply?: (intent: HubIntent) => Promise<IntentAck>;
+  /**
+   * Write an image pasted on the hub's board (a `saveImage` intent, with its
+   * bytes already fetched and checked) and answer with the card and the
+   * `link` it should get. Without it, pastes on the hub's board are refused
+   * and the hello does not offer them.
+   */
+  saveImage?: (intent: SaveImageHubIntent, bytes: Uint8Array) => Promise<IntentAck>;
   /**
    * Share titles and fields only: every card text that goes up (the texts
    * after a hello, changes, the cards in acks) is cut down to its frontmatter
@@ -268,6 +282,7 @@ export class HubClient {
       cards: texts.map(({ id, path, hash }) => ({ id, path, hash })),
       ...(this.o.fieldsOnly ? { fieldsOnly: true } : {}),
       ...(assets && this.o.assets ? { assets, images: this.o.assets.images } : {}),
+      ...(this.o.saveImage ? { uploads: true } : {}),
     };
     const answer = (await this.post(HUB_PATHS.hello, hello, { session: false })) as WelcomeMessage | RefusedMessage | null;
     if (!answer || answer.type !== 'welcome') throw new HubRequestError('The hub did not answer the hello with a welcome.');
@@ -479,6 +494,7 @@ export class HubClient {
   }
 
   private async applyIntent(intent: HubIntent): Promise<IntentAck> {
+    if (intent.op === 'saveImage') return this.applySaveImage(intent);
     if (!this.o.apply) return { intentId: intent.intentId, ok: false, code: 'error', error: READ_ONLY };
     let ack: IntentAck;
     try {
@@ -486,6 +502,51 @@ export class HubClient {
     } catch (e) {
       ack = { intentId: intent.intentId, ok: false, code: 'error', error: describe(e) };
     }
+    return this.noteAck(intent, ack);
+  }
+
+  /** Fetch the pasted image the intent names, check it against the intent, and have the host write it. */
+  private async applySaveImage(intent: SaveImageHubIntent): Promise<IntentAck> {
+    const fail = (code: 'invalid' | 'error', error: string): IntentAck => ({ intentId: intent.intentId, ok: false, code, error });
+    if (!this.o.saveImage) return this.noteAck(intent, fail('error', READ_ONLY));
+    let ack: IntentAck;
+    try {
+      const bytes = await this.download(intent.intent.upload);
+      if (!bytes) {
+        ack = fail('error', 'The hub no longer holds the image.');
+      } else if (bytes.byteLength !== intent.intent.size || createHash('sha256').update(bytes).digest('hex') !== intent.intent.hash) {
+        ack = fail('invalid', 'The image the hub sent does not match the request.');
+      } else {
+        ack = await this.o.saveImage(intent, bytes);
+      }
+    } catch (e) {
+      ack = fail('error', describe(e));
+    }
+    // The hub moves the bytes under the link, so the card's body save that follows has nothing to upload.
+    if (ack.ok && ack.link && this.takesAssets) this.assetsHeld.set(ack.link.replace(/^\/+/, ''), intent.intent.hash);
+    return this.noteAck(intent, ack);
+  }
+
+  /** The bytes of an upload the hub holds, or null when it is gone (404); throws when the request failed. */
+  private async download(id: string): Promise<Uint8Array | null> {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), this.t.uploadTimeoutMs);
+    try {
+      const path = `${HUB_PATHS.uploads}/${encodeURIComponent(id)}`;
+      const res = await this.fetchFn(this.url(path), { headers: this.headers({}), signal: abort.signal });
+      if (res.status === 404) {
+        await res.text().catch(() => '');
+        return null;
+      }
+      if (!res.ok) await this.failed(path, res);
+      return new Uint8Array(await res.arrayBuffer());
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Bookkeeping for an answered intent: cut the card down when sharing fields only, mark the written version as sent, log. */
+  private noteAck(intent: HubIntent, ack: IntentAck): IntentAck {
     if (ack.card) ack = ack.ok ? { ...ack, card: this.outgoing([ack.card])[0]! } : { ...ack, card: this.outgoing([ack.card])[0]! };
     if (ack.ok) {
       // Mark the written version as sent before the watcher reports it, so it is not echoed.
@@ -494,7 +555,7 @@ export class HubClient {
     } else if (ack.card) {
       this.sent.sent(ack.card.id, ack.card.hash);
     }
-    this.log.info(`Hub: intent ${intent.op} ${intent.intentId}: ${ack.ok ? `${ack.route} ${ack.card.path}` : `${ack.code}: ${ack.error}`}`);
+    this.log.info(`Hub: intent ${intent.op} ${intent.intentId}: ${ack.ok ? `${ack.route} ${ack.link ?? ack.card.path}` : `${ack.code}: ${ack.error}`}`);
     return ack;
   }
 

@@ -125,7 +125,7 @@ export function InlineEditor(props: {
       saveTimer.current = setTimeout(flush, SAVE_DELAY_MS);
     };
 
-    /** Hub mode: images are files in the repo, which only VS Code can add. */
+    /** Hub mode without a host that takes pastes: images are files in the repo, which only VS Code can add. */
     const refuseImage = (event: Event) => {
       event.preventDefault();
       setNotice('Images are added in VS Code: the board here holds the text only.');
@@ -173,7 +173,7 @@ export function InlineEditor(props: {
             paste: (event, view) => {
               const cd = event.clipboardData;
               const files = imageFiles(cd?.files);
-              if (files.length > 0 && hubMode) return refuseImage(event);
+              if (files.length > 0 && hubMode && !hostOptions.images) return refuseImage(event);
               vscode.postMessage({
                 type: 'clientLog',
                 message: `paste: types=[${[...(cd?.types ?? [])].join(', ')}] files=${cd?.files.length ?? 0} items=[${[...(cd?.items ?? [])].map((i) => `${i.kind}:${i.type}`).join(', ')}] images=${files.length}`,
@@ -185,7 +185,7 @@ export function InlineEditor(props: {
             },
             drop: (event, view) => {
               const files = imageFiles(event.dataTransfer?.files);
-              if (files.length > 0 && hubMode) return refuseImage(event);
+              if (files.length > 0 && hubMode && !hostOptions.images) return refuseImage(event);
               vscode.postMessage({
                 type: 'clientLog',
                 message: `drop: types=[${[...(event.dataTransfer?.types ?? [])].join(', ')}] files=${event.dataTransfer?.files.length ?? 0} images=${files.length}`,

@@ -45,6 +45,8 @@ class FakeHub {
   uploads: { path: string; type: string; bytes: number; status: number; session: string | undefined }[] = [];
   /** Answer the next uploads of these paths with this status. */
   refuseAssets = new Map<string, number>();
+  /** Images pasted on this hub's board, by id, for `GET uploads/<id>`. */
+  pasted = new Map<string, Buffer>();
   /** Every request's method and path, in order. */
   requests: string[] = [];
 
@@ -99,6 +101,12 @@ class FakeHub {
       const digest = { path, hash: createHash('sha256').update(bytes).digest('hex'), size: bytes.length };
       this.assets.set(path, digest);
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(digest));
+      return;
+    }
+    if (req.method === 'GET' && req.url?.startsWith('/hub/uploads/')) {
+      const bytes = typeof session === 'string' ? this.pasted.get(decodeURIComponent(req.url.slice('/hub/uploads/'.length))) : undefined;
+      if (!bytes) res.writeHead(typeof session === 'string' ? 404 : 400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'no' }));
+      else res.writeHead(200, { 'content-type': 'image/png', 'content-length': String(bytes.length) }).end(bytes);
       return;
     }
     const body = chunks.length ? (JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown) : null;
@@ -533,6 +541,76 @@ describe('HubClient with images', () => {
     await c.client.syncOnce();
     expect(h.hellos.at(-1)!.assets).toBeUndefined();
     expect(h.uploads).toEqual([]);
+  });
+
+  it('writes an image pasted on the hub\'s board through the host, acks the link, and does not upload it again with the card', async () => {
+    const h = await hub();
+    const { root, files } = await repo();
+    const pasted = Buffer.concat([PNG, Buffer.from('pasted')]);
+    h.pasted.set('u1', pasted);
+    const saved: { id: string; ext: string; bytes: Buffer }[] = [];
+    const saveImage: HubClientOptions['saveImage'] = async (intent, bytes) => {
+      saved.push({ id: intent.intent.id, ext: intent.intent.ext, bytes: Buffer.from(bytes) });
+      await writeFile(join(root, '.devtool', 'assets', 'a', 'new.png'), bytes);
+      const f = files[0]!;
+      return { intentId: intent.intentId, ok: true, route: 'disk', card: { id: 'a', path: f.path, hash: cardHash(f.text), text: f.text }, link: '/.devtool/assets/a/new.png' };
+    };
+    const { client } = makeClient(h, () => files, { assets: source(root), saveImage });
+    open.push(client);
+    client.start();
+    await waitFor(() => h.streams.size === 1, 'stream');
+    expect(h.hellos[0]!.uploads).toBe(true);
+    h.requests.length = 0;
+    const intent: HubIntent = { intentId: 'p1', baseHash: cardHash(files[0]!.text), op: 'saveImage', intent: { id: 'a', ext: 'png', hash: sha(pasted), size: pasted.length, upload: 'u1' } };
+    h.send({ type: 'intent', intent });
+    await waitFor(() => h.received.some((m) => m.type === 'ack'), 'ack');
+    expect(saved).toEqual([{ id: 'a', ext: 'png', bytes: pasted }]);
+    expect(h.received.find((m) => m.type === 'ack')).toEqual({ type: 'ack', ack: { intentId: 'p1', ok: true, route: 'disk', card: expect.objectContaining({ id: 'a' }), link: '/.devtool/assets/a/new.png' } });
+    expect(h.requests).toEqual(['GET /hub/uploads/u1', 'POST /hub/events']);
+
+    // The editor inserts the link and saves the body: the hub holds the bytes already, so only the card goes up.
+    files[0] = file('a', 'see ![](/.devtool/assets/a/one.png) and ![](/.devtool/assets/a/new.png)');
+    h.requests.length = 0;
+    client.notifyChanged();
+    await waitFor(() => h.received.some((m) => m.type === 'changed'), 'the change');
+    expect(h.requests).toEqual(['POST /hub/events']);
+  });
+
+  it('refuses a paste whose bytes do not match, one the hub no longer holds, and every paste without a host that writes images', async () => {
+    const h = await hub();
+    const { files } = await repo();
+    const pasted = Buffer.concat([PNG, Buffer.from('pasted')]);
+    h.pasted.set('u1', pasted);
+    let calls = 0;
+    const saveImage: HubClientOptions['saveImage'] = async (intent) => {
+      calls++;
+      return { intentId: intent.intentId, ok: false, code: 'error', error: 'unexpected' };
+    };
+    const { client } = makeClient(h, () => files, { saveImage });
+    open.push(client);
+    client.start();
+    await waitFor(() => h.streams.size === 1, 'stream');
+    const base = { baseHash: cardHash(files[0]!.text), op: 'saveImage' as const };
+    const acks = () => h.received.filter((m): m is Extract<ClientMessage, { type: 'ack' }> => m.type === 'ack').map((m) => m.ack);
+    h.send({ type: 'intent', intent: { intentId: 'p1', ...base, intent: { id: 'a', ext: 'png', hash: sha(PNG), size: pasted.length, upload: 'u1' } } });
+    await waitFor(() => acks().length === 1, 'first ack');
+    expect(acks()[0]).toMatchObject({ intentId: 'p1', ok: false, code: 'invalid', error: /does not match/ });
+    h.send({ type: 'intent', intent: { intentId: 'p2', ...base, intent: { id: 'a', ext: 'png', hash: sha(pasted), size: pasted.length, upload: 'gone' } } });
+    await waitFor(() => acks().length === 2, 'second ack');
+    expect(acks()[1]).toMatchObject({ intentId: 'p2', ok: false, code: 'error', error: /no longer holds/ });
+    expect(calls).toBe(0);
+
+    // A read-only client (kanban sync) offers no uploads and refuses a paste without fetching it.
+    const ro = makeClient(h, () => files);
+    open.push(ro.client);
+    ro.client.start();
+    await waitFor(() => h.streams.size === 2, 'second stream');
+    expect(h.hellos.at(-1)!.uploads).toBeUndefined();
+    h.requests.length = 0;
+    h.send({ type: 'intent', intent: { intentId: 'p3', ...base, intent: { id: 'a', ext: 'png', hash: sha(pasted), size: pasted.length, upload: 'u1' } } });
+    await waitFor(() => acks().filter((a) => a.intentId === 'p3').length === 2, 'both answers');
+    expect(acks().filter((a) => a.intentId === 'p3').every((a) => !a.ok && a.code === 'error')).toBe(true);
+    expect(h.requests.filter((r) => r.startsWith('GET /hub/uploads'))).toEqual(['GET /hub/uploads/u1']);
   });
 
   it('fsAssetSource reads under the folder only', async () => {
