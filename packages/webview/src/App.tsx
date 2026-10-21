@@ -24,6 +24,7 @@ import { NO_HUB, type HubState } from './requestState.js';
 import { HubProvider, RequestNote, RequestPlaceholders, useCardRequest, useHub } from './requests.js';
 import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
+import { EyeOffIcon } from './icons.js';
 import { distinct, filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
 import { hubMode, onHostMessage, vscode } from './vscode.js';
@@ -974,8 +975,9 @@ function CardBody(props: {
   const labels = show.labels ? fields.labels : [];
   const priority = show.priority ? fields.priority : null;
   const entries = card.entries;
+  const noText = card.fieldsOnly === true;
   const hasMeta =
-    entries || priority || labels.length > 0 || due || (show.assignee && fields.assignee) || (show.epic && fields.epic);
+    entries || priority || labels.length > 0 || due || (show.assignee && fields.assignee) || (show.epic && fields.epic) || noText;
 
   return (
     <button
@@ -1024,6 +1026,12 @@ function CardBody(props: {
             </span>
           )}
           {show.assignee && fields.assignee && <span className="assignee">@{fields.assignee}</span>}
+          {noText && (
+            <span className="text-not-shared" title="This repo shares titles and fields only. Open the card in VS Code to read or edit its text.">
+              <EyeOffIcon size={11} />
+              Text not shared
+            </span>
+          )}
         </div>
       )}
       {show.filename && <div className="filename">{card.filename}</div>}

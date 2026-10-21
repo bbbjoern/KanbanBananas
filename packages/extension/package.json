@@ -799,6 +799,11 @@
             "type": "string",
             "default": "",
             "markdownDescription": "URL of a **project hub** that shows this board outside VS Code and sends changes back as requests (for example SuperTask's `https://\u2026/api/hub`). Empty (the default) means off: nothing leaves this machine. With a URL set, run *KanbanBananas: Project Hub: Set Token\u2026* to store the machine token the hub gave you; it goes into VS Code's secret storage, never into the settings. The extension stays the only writer: the hub keeps a copy of the cards, and every change it asks for goes through the same path as the board, or is refused when the card changed meanwhile."
+          },
+          "kanbanBananas.hub.shareText": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Send each card's text to the project hub. Off: only the frontmatter fields and the title leave this machine; the hub shows \"Text not shared\" on the card, its fields can still be changed there, and the text can only be read and edited in VS Code. A hub that cannot take titles and fields only refuses the connection until it is updated or this is on again. Set it per workspace (the repo), like the hub URL."
           }
         }
       }

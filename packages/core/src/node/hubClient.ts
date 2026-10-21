@@ -4,6 +4,7 @@ import {
   HUB_PROTOCOL_VERSION,
   HUB_SESSION_HEADER,
   protocolRefusal,
+  type CardText,
   type ClientMessage,
   type HelloMessage,
   type HubClientInfo,
@@ -14,7 +15,7 @@ import {
   type RepoIdentity,
   type WelcomeMessage,
 } from '../hubProtocol.js';
-import { SentHashes } from '../hubSync.js';
+import { fieldsOnlyText, SentHashes } from '../hubSync.js';
 import type { ColumnConfig } from '../view.js';
 import { cardTexts } from './cardHash.js';
 
@@ -95,6 +96,14 @@ export interface HubClientOptions {
   files: () => Promise<readonly BoardFile[]> | readonly BoardFile[];
   /** Apply an intent and answer with the card as written. Without it every intent is refused as read-only. */
   apply?: (intent: HubIntent) => Promise<IntentAck>;
+  /**
+   * Share titles and fields only: every card text that goes up (the texts
+   * after a hello, changes, the cards in acks) is cut down to its frontmatter
+   * and title line, with the whole file's hash as its version. A hub that
+   * cannot take that (its welcome does not say so) is refused, so no text
+   * leaves the machine by mistake. Off by default.
+   */
+  fieldsOnly?: boolean;
   log?: Partial<HubLog>;
   onStatus?: (status: HubStatus) => void;
   fetch?: typeof fetch;
@@ -117,6 +126,7 @@ const ANSWER_TTL_MS = 5 * 60_000;
 /** Card texts go up in requests of about this many bytes, so a big board fits a hub's body limit. */
 export const HUB_BATCH_BYTES = 512 * 1024;
 const READ_ONLY = 'This client is read-only; open the project in VS Code to apply changes.';
+const FIELDS_ONLY_UNSUPPORTED = 'This hub takes whole card texts only. Update the hub, or share the text (the setting "Share text", kanbanBananas.hub.shareText).';
 
 export class HubClient {
   private readonly t: HubTiming;
@@ -219,7 +229,7 @@ export class HubClient {
 
   /** Hello with every card's hash; send the texts the hub asks for. Afterwards the hub holds the board. */
   private async reconcile(): Promise<void> {
-    const texts = cardTexts(await this.o.files());
+    const texts = this.outgoing(cardTexts(await this.o.files()));
     const hello: HelloMessage = {
       type: 'hello',
       protocol: HUB_PROTOCOL_VERSION,
@@ -227,11 +237,15 @@ export class HubClient {
       repo: this.o.repo,
       columns: [...this.o.columns()],
       cards: texts.map(({ id, path, hash }) => ({ id, path, hash })),
+      ...(this.o.fieldsOnly ? { fieldsOnly: true } : {}),
     };
     const answer = (await this.post(HUB_PATHS.hello, hello, { session: false })) as WelcomeMessage | RefusedMessage | null;
     if (!answer || answer.type !== 'welcome') throw new HubRequestError('The hub did not answer the hello with a welcome.');
     const mismatch = protocolRefusal(answer.protocol, HUB_PROTOCOL_VERSION, { them: 'the hub', us: `the ${this.o.client.kind}` });
     if (mismatch) throw new HubRefusedError(mismatch);
+    if (this.o.fieldsOnly && answer.fieldsOnly !== true) {
+      throw new HubRefusedError({ type: 'refused', code: 'protocol', protocol: answer.protocol, message: FIELDS_ONLY_UNSUPPORTED });
+    }
     this.session = answer.session;
     const byId = new Map(texts.map((c) => [c.id, c]));
     const cards = answer.need.map((id) => byId.get(id)).filter((c): c is NonNullable<typeof c> => c !== undefined);
@@ -239,13 +253,19 @@ export class HubClient {
     this.sent.clear();
     for (const c of texts) this.sent.sent(c.id, c.hash);
     this.current = { ...this.current, lastSyncAt: Date.now(), cards: texts.length };
-    this.log.info(`Hub: reconciled ${texts.length} card(s), sent ${cards.length}`);
+    this.log.info(`Hub: reconciled ${texts.length} card(s), sent ${cards.length}${this.o.fieldsOnly ? ', titles and fields only' : ''}`);
+  }
+
+  /** The cards as they go up: whole, or cut down to titles and fields when the client shares no text. */
+  private outgoing(cards: CardText[]): CardText[] {
+    if (!this.o.fieldsOnly) return cards;
+    return cards.map((c) => ({ ...c, text: fieldsOnlyText(c.text), fieldsOnly: true }));
   }
 
   /** Send what changed since the hub last saw the board, by hash. Before a session exists the reconcile covers it. */
   private async flush(): Promise<void> {
     if (!this.session) return;
-    const texts = cardTexts(await this.o.files());
+    const texts = this.outgoing(cardTexts(await this.o.files()));
     const messages: ClientMessage[] = [];
     const live = new Set<string>();
     for (const card of texts) {
@@ -335,6 +355,7 @@ export class HubClient {
     } catch (e) {
       ack = { intentId: intent.intentId, ok: false, code: 'error', error: describe(e) };
     }
+    if (ack.card) ack = ack.ok ? { ...ack, card: this.outgoing([ack.card])[0]! } : { ...ack, card: this.outgoing([ack.card])[0]! };
     if (ack.ok) {
       // Mark the written version as sent before the watcher reports it, so it is not echoed.
       if (ack.from) this.sent.forget(ack.from);

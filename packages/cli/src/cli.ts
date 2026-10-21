@@ -84,7 +84,8 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban memory --session-start           The latest entry with a short intro, for Claude Code's SessionStart hook
   kanban sync [--once] [--hub <url>]      Keep a project hub's copy of the board current (read-only; VS Code applies
                                           the hub's changes). URL also from KANBAN_HUB_URL; token from KANBAN_HUB_TOKEN
-                                          or KANBAN_HUB_TOKEN_FILE. --once syncs and exits.
+                                          or KANBAN_HUB_TOKEN_FILE. --once syncs and exits. --fields-only sends titles
+                                          and fields, never a card's text (like the extension's "Share text" off).
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -155,6 +156,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
         await runSync(project, { env: io.env, stdout: io.stdout, stderr: io.stderr, ...(io.signal ? { signal: io.signal } : {}) }, {
           hub: str(args.flags.hub),
           once: args.flags.once === true,
+          fieldsOnly: args.flags['fields-only'] === true,
           version: VERSION,
         });
         return EXIT.ok;
@@ -606,7 +608,7 @@ const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string
   set: { args: [1, Infinity], flags: [] },
   edit: { args: [1, 1], flags: ['body', 'expect-mtime'] },
   memory: { args: [0, 0], flags: ['body', 'from-card', 'all', 'session-start'] },
-  sync: { args: [0, 0], flags: ['once', 'hub'] },
+  sync: { args: [0, 0], flags: ['once', 'hub', 'fields-only'] },
 };
 
 function checkArgs(command: string, rest: string[], flags: Args['flags']): void {
@@ -633,7 +635,7 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start', 'once']);
+const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start', 'once', 'fields-only']);
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];

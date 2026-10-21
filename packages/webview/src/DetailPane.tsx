@@ -5,6 +5,7 @@ import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
 import { LabelsField } from './LabelsField.js';
+import { EyeOffIcon } from './icons.js';
 import { useHub } from './requests.js';
 import { hubMode, vscode } from './vscode.js';
 
@@ -33,9 +34,11 @@ export function DetailPane(props: {
   // Hub mode while the machine is away: the fields and the text show, nothing changes.
   const { readOnly } = useHub();
   const set = (changes: Record<string, string | string[] | null>) => void request({ type: 'setFields', id, changes });
+  // A hub's copy without the text (Board 3f): the fields work, the body area is a note; no editor is shown.
+  const noText = card.fieldsOnly === true;
   useEffect(() => {
-    vscode.postMessage({ type: 'editorShown', id });
-  }, [id]);
+    if (!noText) vscode.postMessage({ type: 'editorShown', id });
+  }, [id, noText]);
 
   return (
     <aside className={`detail ${props.wide ? 'wide' : ''}`} aria-label={`Card: ${card.title ?? card.filename}`}>
@@ -124,19 +127,29 @@ export function DetailPane(props: {
         <LabelsField key={id} labels={card.fields.labels} known={props.knownLabels} disabled={readOnly} onChange={(labels) => set({ labels })} />
       </div>
 
-      <ErrorBoundary>
-        <InlineEditor
-          key={id}
-          id={id}
-          live={props.live}
-          onEscape={props.onClose}
-          images={settings.images ?? { format: 'webp', maxWidth: 0 }}
-          assetBase={props.assetBase}
-          log={card.fields.type === 'log'}
-          readOnly={readOnly}
-          {...(settings.columns[0] ? { newCardStatus: settings.columns[0].id } : {})}
-        />
-      </ErrorBoundary>
+      {noText ? (
+        <div className="text-not-shared-note" role="note">
+          <EyeOffIcon size={16} />
+          <div>
+            <strong>The text stays in the repo</strong>
+            <div>This repo shares titles and fields only. Open the card in VS Code to read or edit its text.</div>
+          </div>
+        </div>
+      ) : (
+        <ErrorBoundary>
+          <InlineEditor
+            key={id}
+            id={id}
+            live={props.live}
+            onEscape={props.onClose}
+            images={settings.images ?? { format: 'webp', maxWidth: 0 }}
+            assetBase={props.assetBase}
+            log={card.fields.type === 'log'}
+            readOnly={readOnly}
+            {...(settings.columns[0] ? { newCardStatus: settings.columns[0].id } : {})}
+          />
+        </ErrorBoundary>
+      )}
     </aside>
   );
 }

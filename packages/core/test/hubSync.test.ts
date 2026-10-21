@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { parseCard } from '../src/parse.js';
 import {
   applyToMirror,
   expectationFor,
+  fieldsOnlyText,
   mirrorDigests,
   reconcile,
   SentHashes,
@@ -202,5 +204,30 @@ describe('SentHashes', () => {
     sent.clear();
     expect(sent.size).toBe(0);
     expect(sent.shouldSend('a', 'h1')).toBe(true);
+  });
+});
+
+describe('fieldsOnlyText', () => {
+  it('keeps the frontmatter and the title line, drops the rest, and parses as the same card', () => {
+    const text = '---\nid: "a"\nstatus: "todo"\nlabels: [x, y]\n---\n# The title\n\nA secret body.\n\n## Notes\n- [ ] more\n';
+    const cut = fieldsOnlyText(text);
+    expect(cut).toBe('---\nid: "a"\nstatus: "todo"\nlabels: [x, y]\n---\n# The title\n');
+    const parsed = parseCard(cut);
+    expect(parsed.ok && parsed.card.title).toBe('The title');
+    expect(parsed.ok && parsed.card.fields.labels).toEqual(['x', 'y']);
+    expect(cut).not.toContain('secret');
+    expect(fieldsOnlyText(cut)).toBe(cut);
+  });
+
+  it('keeps CRLF and a BOM, a title from a level-two first line, and sends no heading without a title', () => {
+    expect(fieldsOnlyText('\uFEFF---\r\nid: "a"\r\n---\r\n## Second level\r\n\r\nbody\r\n')).toBe('\uFEFF---\r\nid: "a"\r\n---\r\n# Second level\r\n');
+    expect(fieldsOnlyText('---\nid: "a"\n---\nno heading here\n\n## later section\n')).toBe('---\nid: "a"\n---\n');
+  });
+
+  it('sends a broken card as its closed frontmatter block, or empty', () => {
+    expect(fieldsOnlyText('---\nid: [\n---\n# Title\n\nbody\n')).toBe('---\nid: [\n---\n');
+    expect(fieldsOnlyText('---\nid: "a"\n# never closed\n\nbody\n')).toBe('');
+    expect(fieldsOnlyText('# No frontmatter\n\nbody\n')).toBe('');
+    expect(fieldsOnlyText('')).toBe('');
   });
 });

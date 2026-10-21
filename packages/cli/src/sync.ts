@@ -25,6 +25,8 @@ export interface SyncOptions {
   hub?: string | undefined;
   /** One reconcile, then exit. */
   once: boolean;
+  /** Share titles and fields only: no card text leaves this machine (`--fields-only`). */
+  fieldsOnly?: boolean;
   version: string;
   /** How often to look whether VS Code has started or stopped. */
   pollMs?: number;
@@ -76,11 +78,12 @@ export async function runSync(project: Project, io: SyncIo, opts: SyncOptions): 
     client: { kind: 'cli', version: opts.version },
     columns: () => columns,
     files: () => readBoardDir(project.features),
+    ...(opts.fieldsOnly ? { fieldsOnly: true } : {}),
     log: { info: say, warn: (m) => io.stderr(`${m}\n`), error: (m) => io.stderr(`${m}\n`) },
     onStatus: (s: HubStatus) => say(`sync: ${s.state}${s.message ? ` (${s.message})` : ''}`),
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
   });
-  say(`sync: ${repo.remote} (${repo.featuresDir}) → ${url}`);
+  say(`sync: ${repo.remote} (${repo.featuresDir}) → ${url}${opts.fieldsOnly ? ' (titles and fields only)' : ''}`);
 
   if (opts.once) {
     await client.syncOnce();

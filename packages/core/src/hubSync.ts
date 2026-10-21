@@ -1,5 +1,5 @@
 import type { CardDigest, CardText, ClientMessage, Expectation, HubIntent } from './hubProtocol.js';
-import type { CardFields, KnownField } from './parse.js';
+import { parseCard, type CardFields, type KnownField } from './parse.js';
 import type { FieldValue } from './patch.js';
 
 /**
@@ -24,6 +24,27 @@ export function reconcile(mirror: readonly CardDigest[], current: readonly CardD
   const live = new Set(current.map((d) => d.id));
   const gone = mirror.filter((d) => !live.has(d.id)).map((d) => d.id);
   return { need, gone };
+}
+
+/**
+ * A card's text cut down to its titles and fields, for a client that shares no
+ * text (`CardText.fieldsOnly`): the frontmatter block as written, then the
+ * title as a `# ` heading, nothing else. The result parses as the same card
+ * with the same fields and title, an empty excerpt and no entries. A file
+ * that does not parse keeps its frontmatter block when it has a closed one
+ * (the hub then reports the same YAML problem), and is sent empty otherwise.
+ */
+export function fieldsOnlyText(text: string): string {
+  const parsed = parseCard(text);
+  if (parsed.ok) {
+    const { bom, open, frontmatter, close, eol } = parsed.card.source;
+    const title = parsed.card.title;
+    return (bom ? '\uFEFF' : '') + open + frontmatter + close + (title === null ? '' : `# ${title}${eol}`);
+  }
+  const bom = text.startsWith('\uFEFF');
+  const body = bom ? text.slice(1) : text;
+  const block = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(body);
+  return block ? (bom ? '\uFEFF' : '') + block[0] : '';
 }
 
 /** The hub's copy of a board: card texts by id. Rebuilt from a `hello` plus the texts it asks for. */

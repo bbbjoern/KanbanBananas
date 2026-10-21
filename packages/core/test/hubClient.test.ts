@@ -16,7 +16,7 @@ import {
   type Mirror,
   type RefusedMessage,
 } from '../src/index.js';
-import { batches, cardDigests, cardHash, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
+import { batches, cardDigests, cardHash, cardTexts, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
 
 /** A hub in-process: the three endpoints, a mirror kept with the same helpers SuperTask will use. */
 class FakeHub {
@@ -31,6 +31,8 @@ class FakeHub {
   sessions: string[] = [];
   refuse: RefusedMessage | 'token' | null = null;
   welcomeProtocol = HUB_PROTOCOL_VERSION;
+  /** Whether this hub echoes `fieldsOnly` (a hub built before the flag does not). */
+  takesFieldsOnly = true;
 
   constructor() {
     this.server = createServer((req, res) => void this.handle(req, res));
@@ -75,7 +77,13 @@ class FakeHub {
       applyToMirror(this.mirror, hello);
       const id = `s${this.hellos.length}`;
       this.sessions.push(id);
-      const welcome = { type: 'welcome', protocol: this.welcomeProtocol, session: id, need: reconcile(mirrorDigests(this.mirror), hello.cards).need };
+      const welcome = {
+        type: 'welcome',
+        protocol: this.welcomeProtocol,
+        session: id,
+        need: reconcile(mirrorDigests(this.mirror), hello.cards).need,
+        ...(hello.fieldsOnly && this.takesFieldsOnly ? { fieldsOnly: true } : {}),
+      };
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(welcome));
     } else if (req.method === 'POST' && req.url === '/hub/events') {
       if (typeof session !== 'string') {
@@ -324,5 +332,65 @@ describe('HubClient', () => {
     expect(h2.streamsOpened).toBe(0);
     expect(mirrorDigests(h2.mirror).map((d) => d.id)).toEqual(['x']);
     expect(once.client.status().lastSyncAt).not.toBeNull();
+  });
+});
+
+describe('HubClient sharing titles and fields only', () => {
+  it('asks for it in the hello, sends cut-down texts with the whole file\'s hash, and cuts the card in every ack', async () => {
+    const h = await hub();
+    let files = [file('a', 'a secret body'), file('b', 'another secret', 'done/')];
+    const acks: IntentAck[] = [];
+    const { client } = makeClient(h, () => files, {
+      fieldsOnly: true,
+      apply: async (intent) => {
+        files = [file('a', 'a secret body, edited by the machine'), files[1]!];
+        const ack: IntentAck = { intentId: intent.intentId, ok: true, card: { ...cardTexts([files[0]!])[0]! }, route: 'disk' };
+        acks.push(ack);
+        return ack;
+      },
+    });
+    open.push(client);
+    client.start();
+    await waitFor(() => client.status().state === 'connected' && h.streams.size > 0, 'connected');
+    expect(h.hellos[0]?.fieldsOnly).toBe(true);
+    expect(h.hellos[0]?.cards.map((c) => c.hash)).toEqual(cardDigests(files).map((c) => c.hash));
+    const sent = h.received.flatMap((m) => (m.type === 'cards' ? m.cards : []));
+    expect(sent.map((c) => c.text)).toEqual(['---\nid: "a"\nstatus: "todo"\n---\n# a\n', '---\nid: "b"\nstatus: "todo"\n---\n# b\n']);
+    expect(sent.every((c) => c.fieldsOnly === true && c.hash === cardHash(files.find((f) => f.path === c.path)!.text))).toBe(true);
+    expect(JSON.stringify(h.received)).not.toContain('secret');
+
+    h.send({ type: 'intent', intent: { intentId: 'i1', baseHash: sent[0]!.hash, op: 'note', intent: { id: 'a', heading: 'x' } } });
+    await waitFor(() => h.received.some((m) => m.type === 'ack'), 'the ack');
+    const ack = h.received.find((m) => m.type === 'ack');
+    expect(ack?.type === 'ack' && ack.ack.ok && ack.ack.card).toEqual({ ...acks[0]!.ok && acks[0].card, text: '---\nid: "a"\nstatus: "todo"\n---\n# a\n', fieldsOnly: true });
+    expect(JSON.stringify(h.received)).not.toContain('secret');
+
+    // The machine's own write is not echoed, since the whole file's hash is what was marked as sent.
+    client.notifyChanged();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(h.received.filter((m) => m.type === 'changed')).toHaveLength(0);
+  });
+
+  it('is refused by a hub that does not say it takes titles and fields only, and sends it no text', async () => {
+    const h = await hub();
+    h.takesFieldsOnly = false;
+    const { client, statuses } = makeClient(h, () => [file('a', 'a secret body')], { fieldsOnly: true });
+    open.push(client);
+    client.start();
+    await waitFor(() => client.status().state === 'refused', 'refused');
+    expect(statuses.at(-1)?.message).toContain('whole card texts only');
+    expect(h.received).toEqual([]);
+    expect(h.streams.size).toBe(0);
+  });
+
+  it('sends whole texts and no flag when off', async () => {
+    const h = await hub();
+    const files = [file('a', 'the body')];
+    const { client } = makeClient(h, () => files);
+    await client.syncOnce();
+    expect(h.hellos[0]?.fieldsOnly).toBeUndefined();
+    const sent = h.received.flatMap((m) => (m.type === 'cards' ? m.cards : []));
+    expect(sent[0]?.fieldsOnly).toBeUndefined();
+    expect(sent[0]?.text).toContain('the body');
   });
 });

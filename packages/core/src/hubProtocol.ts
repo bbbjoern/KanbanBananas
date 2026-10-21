@@ -21,7 +21,10 @@ import type { ColumnConfig } from './view.js';
  *
  * Both sides compile against this file. `HUB_PROTOCOL_VERSION` goes up on any
  * change a peer built from the old file couldn't handle; `hello` carries it and
- * a mismatch is refused with a message that says which side to update.
+ * a mismatch is refused with a message that says which side to update. An
+ * optional feature is negotiated instead, so both sides keep working with an
+ * older peer: the client asks for it in `hello`, the hub echoes it in
+ * `welcome`, and the client uses it only when echoed (`fieldsOnly` is one).
  *
  * Over HTTP (`HUB_PATHS`, relative to the hub URL, bearer token on every request):
  * - `POST hello` with a `HelloMessage` answers `welcome` (200) or `refused`
@@ -55,9 +58,16 @@ export interface CardDigest {
   hash: string;
 }
 
-/** A card's full text as on disk. `hash` is `cardHash(text)`; a receiver may check it. */
+/**
+ * A card's text as on disk. `hash` is `cardHash(text)`; a receiver may check it.
+ * With `fieldsOnly`, the client shares titles and fields only: `text` is the
+ * frontmatter block and the title line (`fieldsOnlyText`), `hash` stays the
+ * whole file's (so reconcile and the echo guard keep working), and a receiver
+ * cannot check one against the other. See `HelloMessage.fieldsOnly`.
+ */
 export interface CardText extends CardDigest {
   text: string;
+  fieldsOnly?: boolean;
 }
 
 export interface HubClientInfo {
@@ -74,6 +84,14 @@ export type HelloMessage = {
   columns: ColumnConfig[];
   /** Every card on the board (the valid ones and the broken ones alike: the hub stores text, not a model). */
   cards: CardDigest[];
+  /**
+   * The client shares titles and fields only: every card text it sends is cut
+   * down (`CardText.fieldsOnly`), and the hub may neither show nor edit the
+   * text. A hub that takes it echoes `fieldsOnly: true` in its welcome; one
+   * that does not (built before the flag) is refused by the client, which
+   * never sends cut-down texts to it. Absent or false: whole texts, as always.
+   */
+  fieldsOnly?: boolean;
 };
 
 /** Client → hub. */
@@ -108,6 +126,8 @@ export type WelcomeMessage = {
   session: string;
   /** Ids whose text the hub lacks or holds in another version. */
   need: string[];
+  /** True when the hello asked for titles and fields only and the hub takes it. */
+  fieldsOnly?: boolean;
 };
 
 export type HubMessage =

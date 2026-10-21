@@ -749,6 +749,38 @@ button {
   background: var(--chip-bg);
 }
 
+/* A hub's copy without the card's text (Board 3f): on the card, and in place of the editor. */
+.text-not-shared {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.text-not-shared-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--chip-bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.text-not-shared-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.text-not-shared-note strong {
+  display: block;
+  color: var(--fg);
+  font-size: 13px;
+}
+
 .message.crash {
   max-width: 640px;
   line-height: 1.5;

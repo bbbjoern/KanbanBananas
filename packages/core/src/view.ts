@@ -19,6 +19,12 @@ export interface CardView {
   warnings: string[];
   /** A log card's entries (`type: log`): how many are open and done. */
   entries?: EntryCounts;
+  /**
+   * A hub's copy that holds the card's title and fields only (the repo shares
+   * no text: `CardText.fieldsOnly`). The board shows "Text not shared" instead
+   * of an excerpt, the pane a note instead of the editor. Never set in VS Code.
+   */
+  fieldsOnly?: true;
 }
 
 export interface BrokenView {

@@ -46,6 +46,11 @@ export class HubHost implements vscode.Disposable {
     return (vscode.workspace.getConfiguration(SECTION).get<string>('hub.url') ?? '').trim().replace(/\/+$/, '');
   }
 
+  /** `kanbanBananas.hub.shareText`: off means the hub gets titles and fields only, never a card's text. */
+  shareText(): boolean {
+    return vscode.workspace.getConfiguration(SECTION).get<boolean>('hub.shareText') ?? true;
+  }
+
   /** Stop the client and start a new one when a hub, a token and a board are there. */
   restart(): void {
     this.restarting = this.restarting.then(() => this.doRestart()).catch((e) => log.error(`Hub: restart failed: ${e instanceof Error ? e.message : String(e)}`));
@@ -79,10 +84,11 @@ export class HubHost implements vscode.Disposable {
       columns: () => this.controller.settingsNow.view.columns,
       files: () => this.controller.boardFiles(),
       apply: (intent) => this.apply(intent),
+      fieldsOnly: !this.shareText(),
       log: { info: (m) => log.info(m), warn: (m) => log.warn(m), error: (m) => log.error(m) },
       onStatus: (s) => this.renderStatus(s),
     });
-    log.info(`Hub: connecting to ${url} for ${repo.remote} (${repo.featuresDir})`);
+    log.info(`Hub: connecting to ${url} for ${repo.remote} (${repo.featuresDir})${this.shareText() ? '' : ', titles and fields only'}`);
     this.client.start();
   }
 
@@ -121,7 +127,7 @@ export class HubHost implements vscode.Disposable {
       ? 'The hub is off: no URL in the settings.'
       : !this.client
         ? this.item.tooltip?.toString() ?? ''
-        : `${s?.state ?? 'off'}${s?.message ? `: ${s.message}` : ''}${s?.lastSyncAt ? ` · last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}` : ''}`;
+        : `${s?.state ?? 'off'}${s?.message ? `: ${s.message}` : ''}${s?.lastSyncAt ? ` · last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}` : ''}${this.shareText() ? '' : ' · titles and fields only'}`;
     const pick = await vscode.window.showQuickPick(
       [
         { label: url ? `$(cloud) ${url}` : '$(cloud) No hub', detail, action: 'none' },
