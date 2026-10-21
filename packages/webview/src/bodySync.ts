@@ -54,8 +54,11 @@ export class BodySync {
     const flight = this.inFlight;
     if (!flight) return null;
     this.inFlight = null;
-    // Typing since the save started, as changes from the sent text.
-    const since = flight.local.invert(Text.of(this.synced.split('\n'))).compose(this.local);
+    // Typing since the save started, as changes from the sent text. None when
+    // nothing was typed: composing the save's own changes with their inverse
+    // is not an empty ChangeSet, and would keep the editor dirty, saving the
+    // same text again and again.
+    const since = this.local === flight.local ? ChangeSet.empty(flight.sent.length) : flight.local.invert(Text.of(this.synced.split('\n'))).compose(this.local);
     const outside = diffChange(flight.sent, result);
     this.synced = result;
     this.local = since.map(outside);

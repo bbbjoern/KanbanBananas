@@ -167,6 +167,27 @@ describe('BodySync', () => {
     }
   });
 
+  it('a save answered with the sent text leaves nothing to save: no second, empty save', () => {
+    const ed = new Editor(BODY, BODY.length);
+    for (const ch of '\n\nTyped.') ed.type(ch);
+    const save = ed.sync.startSave(ed.text)!;
+    expect(ed.sync.dirty).toBe(true);
+    ed.apply(ed.sync.saved(save.body));
+    expect(ed.sync.dirty).toBe(false);
+    expect(ed.sync.startSave(ed.text)).toBeNull();
+    expect(ed.text).toBe(save.body);
+  });
+
+  it('typing while a save is in flight is the next save, from the saved text', () => {
+    const ed = new Editor(BODY, BODY.length);
+    ed.type('a');
+    const first = ed.sync.startSave(ed.text)!;
+    ed.type('b');
+    ed.apply(ed.sync.saved(first.body));
+    expect(ed.sync.dirty).toBe(true);
+    expect(ed.sync.startSave(ed.text)).toEqual({ base: first.body, body: first.body + 'b' });
+  });
+
   it('conflict: keep mine makes the editor text the next save, based on theirs', () => {
     const ed = new Editor(BODY, 0);
     ed.type('mine ');
