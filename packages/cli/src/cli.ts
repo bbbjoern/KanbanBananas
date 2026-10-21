@@ -84,8 +84,9 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban memory --session-start           The latest entry with a short intro, for Claude Code's SessionStart hook
   kanban sync [--once] [--hub <url>]      Keep a project hub's copy of the board current (read-only; VS Code applies
                                           the hub's changes). URL also from KANBAN_HUB_URL; token from KANBAN_HUB_TOKEN
-                                          or KANBAN_HUB_TOKEN_FILE. --once syncs and exits. --fields-only sends titles
-                                          and fields, never a card's text (like the extension's "Share text" off).
+                                          or KANBAN_HUB_TOKEN_FILE. The images the cards refer to go up too. --once
+                                          syncs and exits. --fields-only sends titles and fields, never a card's text
+                                          or an image (like the extension's "Share text" off).
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;

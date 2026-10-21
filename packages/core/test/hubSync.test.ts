@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { parseCard } from '../src/parse.js';
 import {
   applyToMirror,
+  assetMediaType,
+  assetPathOk,
+  assetRefs,
   expectationFor,
   fieldsOnlyText,
   mirrorDigests,
   reconcile,
+  reconcileAssets,
   SentHashes,
   staleFields,
   type CardDigest,
@@ -229,5 +233,50 @@ describe('fieldsOnlyText', () => {
     expect(fieldsOnlyText('---\nid: "a"\n# never closed\n\nbody\n')).toBe('');
     expect(fieldsOnlyText('# No frontmatter\n\nbody\n')).toBe('');
     expect(fieldsOnlyText('')).toBe('');
+  });
+});
+
+describe('assets', () => {
+  it('lists the images the cards refer to under the images folder, each once, in order; not web links, SVGs or paths elsewhere', () => {
+    const cards = [
+      { text: '# a\n\n![](/.devtool/assets/a/2026-10-21-101010.webp)\n![x](/.devtool/assets/a/shot%202.png)\n![](https://example.org/x.png)\n' },
+      { text: '# b\n\n![](/.devtool/assets/a/2026-10-21-101010.webp)\n<img src="/.devtool/assets/b/one.jpg">\n![](/docs/pic.png)\n![](/.devtool/assets/b/vector.svg)\n![](/.devtool/assets/../secret.png)\n' },
+    ];
+    expect(assetRefs(cards, '.devtool/assets')).toEqual(['.devtool/assets/a/2026-10-21-101010.webp', '.devtool/assets/a/shot 2.png', '.devtool/assets/b/one.jpg']);
+    expect(assetRefs(cards, '/.devtool/assets/')).toEqual(assetRefs(cards, '.devtool/assets'));
+    expect(assetRefs(cards, 'docs')).toEqual(['docs/pic.png']);
+  });
+
+  it('checks an asset path: under the folder, plain segments, an image extension, no traversal', () => {
+    expect(assetPathOk('.devtool/assets/a/x.webp', '.devtool/assets')).toBe(true);
+    expect(assetPathOk('.devtool/assets/a/b/x.JPG', '.devtool/assets')).toBe(true);
+    expect(assetPathOk('.devtool/assets/x.webp', '.devtool/assets')).toBe(true);
+    expect(assetPathOk('.devtool/assets', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets/a/x.svg', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets/a/x', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets/../a/x.png', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets//x.png', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets/a\\b/x.png', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('.devtool/assets/a/x?.png', '.devtool/assets')).toBe(false);
+    expect(assetPathOk('other/a/x.png', '.devtool/assets')).toBe(false);
+    expect(assetPathOk(`.devtool/assets/${'a'.repeat(400)}.png`, '.devtool/assets')).toBe(false);
+    expect(assetMediaType('a/x.jpg')).toBe('image/jpeg');
+    expect(assetMediaType('a/x.JPEG')).toBe('image/jpeg');
+    expect(assetMediaType('a/x.webp')).toBe('image/webp');
+  });
+
+  it('reconciles assets by path and hash', () => {
+    const held = [
+      { path: 'a.png', hash: '1', size: 1 },
+      { path: 'b.png', hash: '2', size: 1 },
+      { path: 'c.png', hash: '3', size: 1 },
+    ];
+    const current = [
+      { path: 'a.png', hash: '1', size: 1 },
+      { path: 'b.png', hash: '9', size: 1 },
+      { path: 'd.png', hash: '4', size: 1 },
+    ];
+    expect(reconcileAssets(held, current)).toEqual({ need: ['b.png', 'd.png'], gone: ['c.png'] });
+    expect(reconcileAssets([], [])).toEqual({ need: [], gone: [] });
   });
 });

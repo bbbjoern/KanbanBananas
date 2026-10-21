@@ -1,5 +1,9 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   applyToMirror,
@@ -7,6 +11,8 @@ import {
   HUB_SESSION_HEADER,
   mirrorDigests,
   reconcile,
+  reconcileAssets,
+  type AssetDigest,
   type BoardFile,
   type ClientMessage,
   type HelloMessage,
@@ -16,7 +22,7 @@ import {
   type Mirror,
   type RefusedMessage,
 } from '../src/index.js';
-import { batches, cardDigests, cardHash, cardTexts, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
+import { batches, cardDigests, cardHash, cardTexts, fsAssetSource, HubClient, type HubClientOptions, type HubStatus } from '../src/node/index.js';
 
 /** A hub in-process: the three endpoints, a mirror kept with the same helpers SuperTask will use. */
 class FakeHub {
@@ -33,6 +39,14 @@ class FakeHub {
   welcomeProtocol = HUB_PROTOCOL_VERSION;
   /** Whether this hub echoes `fieldsOnly` (a hub built before the flag does not). */
   takesFieldsOnly = true;
+  /** Whether this hub stores images; the ones it holds by path, and every upload in order with its status. */
+  takesAssets = true;
+  assets = new Map<string, AssetDigest>();
+  uploads: { path: string; type: string; bytes: number; status: number; session: string | undefined }[] = [];
+  /** Answer the next uploads of these paths with this status. */
+  refuseAssets = new Map<string, number>();
+  /** Every request's method and path, in order. */
+  requests: string[] = [];
 
   constructor() {
     this.server = createServer((req, res) => void this.handle(req, res));
@@ -47,6 +61,12 @@ class FakeHub {
   async close(): Promise<void> {
     this.dropStreams();
     await new Promise<void>((r) => this.server.close(() => r()));
+  }
+
+  private reconcileAssets(current: AssetDigest[]): string[] {
+    const { need, gone } = reconcileAssets([...this.assets.values()], current);
+    for (const path of gone) this.assets.delete(path);
+    return need;
   }
 
   send(message: HubMessage): void {
@@ -65,8 +85,23 @@ class FakeHub {
     }
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
-    const body = chunks.length ? (JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown) : null;
     const session = req.headers[HUB_SESSION_HEADER];
+    this.requests.push(`${req.method} ${req.url}`);
+    if (req.method === 'PUT' && req.url?.startsWith('/hub/assets/')) {
+      const path = req.url.slice('/hub/assets/'.length).split('/').map(decodeURIComponent).join('/');
+      const bytes = Buffer.concat(chunks);
+      const status = typeof session !== 'string' ? 400 : (this.refuseAssets.get(path) ?? 200);
+      this.uploads.push({ path, type: String(req.headers['content-type']), bytes: bytes.length, status, session: session as string | undefined });
+      if (status !== 200) {
+        res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'no' }));
+        return;
+      }
+      const digest = { path, hash: createHash('sha256').update(bytes).digest('hex'), size: bytes.length };
+      this.assets.set(path, digest);
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(digest));
+      return;
+    }
+    const body = chunks.length ? (JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown) : null;
     if (req.method === 'POST' && req.url === '/hub/hello') {
       const hello = body as HelloMessage;
       this.hellos.push(hello);
@@ -83,6 +118,7 @@ class FakeHub {
         session: id,
         need: reconcile(mirrorDigests(this.mirror), hello.cards).need,
         ...(hello.fieldsOnly && this.takesFieldsOnly ? { fieldsOnly: true } : {}),
+        ...(hello.assets && this.takesAssets ? { assets: true, needAssets: this.reconcileAssets(hello.assets) } : {}),
       };
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(welcome));
     } else if (req.method === 'POST' && req.url === '/hub/events') {
@@ -392,5 +428,121 @@ describe('HubClient sharing titles and fields only', () => {
     const sent = h.received.flatMap((m) => (m.type === 'cards' ? m.cards : []));
     expect(sent[0]?.fieldsOnly).toBeUndefined();
     expect(sent[0]?.text).toContain('the body');
+  });
+});
+
+describe('HubClient with images', () => {
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+  let root = '';
+  afterEach(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+    root = '';
+  });
+  async function repo(): Promise<{ root: string; files: BoardFile[] }> {
+    root = await mkdtemp(join(tmpdir(), 'kb-assets-'));
+    await mkdir(join(root, '.devtool', 'assets', 'a'), { recursive: true });
+    await mkdir(join(root, '.devtool', 'assets', 'b'), { recursive: true });
+    await writeFile(join(root, '.devtool', 'assets', 'a', 'one.png'), PNG);
+    await writeFile(join(root, '.devtool', 'assets', 'a', 'unused.png'), PNG);
+    await writeFile(join(root, '.devtool', 'assets', 'b', 'two.webp'), Buffer.concat([PNG, Buffer.from('2')]));
+    const files = [file('a', 'see ![](/.devtool/assets/a/one.png) and ![](/.devtool/assets/a/missing.png) and ![](/.devtool/assets/a/v.svg)'), file('b', '![](/.devtool/assets/b/two.webp)')];
+    return { root, files };
+  }
+  const source = (root: string) => fsAssetSource(root, { folder: '.devtool/assets', format: 'webp', maxWidth: 1600 });
+
+  it('lists the referenced images that exist in the hello, uploads the ones the hub lacks, and a new reference before its card', async () => {
+    const h = await hub();
+    const { root, files } = await repo();
+    const { client } = makeClient(h, () => files, { assets: source(root) });
+    open.push(client);
+    client.start();
+    await waitFor(() => client.status().state === 'connected', 'connected');
+    const hello = h.hellos[0]!;
+    expect(hello.assets).toEqual([
+      { path: '.devtool/assets/a/one.png', hash: sha(PNG), size: PNG.length },
+      { path: '.devtool/assets/b/two.webp', hash: sha(Buffer.concat([PNG, Buffer.from('2')])), size: PNG.length + 1 },
+    ]);
+    expect(hello.images).toEqual({ folder: '.devtool/assets', format: 'webp', maxWidth: 1600 });
+    expect(h.uploads.map((u) => [u.path, u.type, u.bytes, u.status, u.session])).toEqual([
+      ['.devtool/assets/a/one.png', 'image/png', PNG.length, 200, 's1'],
+      ['.devtool/assets/b/two.webp', 'image/webp', PNG.length + 1, 200, 's1'],
+    ]);
+    expect(client.status()).toMatchObject({ cards: 2, assets: 2 });
+
+    // A card now refers to a new file: it goes up first, then the card; a reference the hub holds is not sent again.
+    await writeFile(join(root, '.devtool', 'assets', 'b', 'three.gif'), Buffer.from('GIF89a'));
+    files[1] = file('b', '![](/.devtool/assets/b/two.webp) ![](/.devtool/assets/b/three.gif)');
+    h.requests.length = 0;
+    client.notifyChanged();
+    await waitFor(() => h.received.some((m) => m.type === 'changed'), 'the change');
+    expect(h.requests).toEqual(['PUT /hub/assets/.devtool/assets/b/three.gif', 'POST /hub/events']);
+    expect(h.uploads.at(-1)).toMatchObject({ path: '.devtool/assets/b/three.gif', type: 'image/gif', bytes: 6, status: 200 });
+
+    // The next reconcile: the hub holds everything, nothing is uploaded; the hash cache is reused.
+    h.requests.length = 0;
+    await client.syncOnce();
+    expect(h.requests).toEqual(['POST /hub/hello']);
+    expect(h.hellos.at(-1)!.assets!.map((a) => a.path)).toEqual(['.devtool/assets/a/one.png', '.devtool/assets/b/two.webp', '.devtool/assets/b/three.gif']);
+  });
+
+  it('does not retry an image the hub refused until the file changes, and goes on with the rest', async () => {
+    const h = await hub();
+    const { root, files } = await repo();
+    h.refuseAssets.set('.devtool/assets/a/one.png', 413);
+    const { client } = makeClient(h, () => files, { assets: source(root) });
+    open.push(client);
+    client.start();
+    await waitFor(() => client.status().state === 'connected', 'connected');
+    expect(h.uploads.map((u) => [u.path, u.status])).toEqual([
+      ['.devtool/assets/a/one.png', 413],
+      ['.devtool/assets/b/two.webp', 200],
+    ]);
+    expect(client.status().assets).toBe(1);
+    client.notifyChanged();
+    await new Promise((r) => setTimeout(r, 60));
+    expect(h.uploads.length).toBe(2);
+    // The file changed: it is offered again.
+    h.refuseAssets.clear();
+    await writeFile(join(root, '.devtool', 'assets', 'a', 'one.png'), Buffer.concat([PNG, Buffer.from('new')]));
+    await client.syncOnce();
+    expect(h.uploads.at(-1)).toMatchObject({ path: '.devtool/assets/a/one.png', status: 200, bytes: PNG.length + 3 });
+  });
+
+  it('sends no images to a hub that does not say it takes them, nor with titles and fields only, nor without a source', async () => {
+    const h = await hub();
+    const { root, files } = await repo();
+    h.takesAssets = false;
+    const a = makeClient(h, () => files, { assets: source(root) });
+    open.push(a.client);
+    await a.client.syncOnce();
+    expect(h.hellos.at(-1)!.assets).toHaveLength(2);
+    expect(h.uploads).toEqual([]);
+    expect(a.client.status().assets).toBe(0);
+
+    h.takesAssets = true;
+    const b = makeClient(h, () => files, { assets: source(root), fieldsOnly: true });
+    open.push(b.client);
+    await b.client.syncOnce();
+    expect(h.hellos.at(-1)!.assets).toBeUndefined();
+    expect(h.hellos.at(-1)!.images).toBeUndefined();
+    expect(h.uploads).toEqual([]);
+
+    const c = makeClient(h, () => files);
+    open.push(c.client);
+    await c.client.syncOnce();
+    expect(h.hellos.at(-1)!.assets).toBeUndefined();
+    expect(h.uploads).toEqual([]);
+  });
+
+  it('fsAssetSource reads under the folder only', async () => {
+    const { root } = await repo();
+    const src = source(root);
+    expect(await src.stat('.devtool/assets/a/one.png')).toMatchObject({ size: PNG.length });
+    expect(await src.stat('.devtool/assets/a/nope.png')).toBeNull();
+    expect(await src.stat('.devtool/assets/a')).toBeNull();
+    await expect(src.read('../etc/passwd.png')).rejects.toThrow(/Not an asset path/);
+    await expect(src.read('.devtool/assets/../x.png')).rejects.toThrow(/Not an asset path/);
+    expect(Buffer.from(await src.read('.devtool/assets/a/one.png'))).toEqual(PNG);
   });
 });

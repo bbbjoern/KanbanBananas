@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import type { BoardFile } from '../board.js';
 import {
   HUB_PATHS,
   HUB_PROTOCOL_VERSION,
   HUB_SESSION_HEADER,
   protocolRefusal,
+  type AssetDigest,
   type CardText,
   type ClientMessage,
   type HelloMessage,
@@ -15,8 +17,9 @@ import {
   type RepoIdentity,
   type WelcomeMessage,
 } from '../hubProtocol.js';
-import { fieldsOnlyText, SentHashes } from '../hubSync.js';
+import { assetMediaType, assetRefs, fieldsOnlyText, SentHashes } from '../hubSync.js';
 import type { ColumnConfig } from '../view.js';
+import type { HubAssetSource } from './assetSource.js';
 import { cardTexts } from './cardHash.js';
 
 /**
@@ -34,7 +37,13 @@ import { cardTexts } from './cardHash.js';
  * - An intent is applied once per id, acked with the card as written, and
  *   the resulting hash is marked as sent before the watcher sees the write,
  *   so the client's own write is not echoed back.
- * - No files, no settings: the host passes `files()`, `columns()` and `apply()`.
+ * - Images (the screenshots cards refer to) go up as files of their own,
+ *   one `PUT` each, when the hub says it takes them: the ones it lacks after
+ *   a hello, and the ones a changed card newly refers to, before the card.
+ *   Never with `fieldsOnly`. A hub that refuses one (too large, not an image)
+ *   is not asked again until the file changes.
+ * - No files, no settings: the host passes `files()`, `columns()`, `apply()`
+ *   and, for images, `assets`.
  */
 
 export interface HubEndpoint {
@@ -63,6 +72,8 @@ export interface HubTiming {
   streamIdleMs: number;
   /** For hello and events. */
   requestTimeoutMs: number;
+  /** For one image upload. */
+  uploadTimeoutMs: number;
 }
 
 export const DEFAULT_HUB_TIMING: HubTiming = {
@@ -73,6 +84,7 @@ export const DEFAULT_HUB_TIMING: HubTiming = {
   debounceMs: 300,
   streamIdleMs: 90_000,
   requestTimeoutMs: 20_000,
+  uploadTimeoutMs: 60_000,
 };
 
 export type HubState = 'off' | 'connecting' | 'connected' | 'offline' | 'refused';
@@ -85,6 +97,8 @@ export interface HubStatus {
   lastSyncAt: number | null;
   /** Cards on the board at the last reconcile. */
   cards: number;
+  /** Images the hub holds for them, after the last reconcile (0 when the hub takes none). */
+  assets: number;
 }
 
 export interface HubClientOptions {
@@ -104,6 +118,12 @@ export interface HubClientOptions {
    * leaves the machine by mistake. Off by default.
    */
   fieldsOnly?: boolean;
+  /**
+   * Where the images the cards refer to are read (`fsAssetSource`). With it
+   * the hello lists them and the hub, when it takes images, is sent the ones
+   * it lacks. Without it, or with `fieldsOnly`, no image leaves the machine.
+   */
+  assets?: HubAssetSource;
   log?: Partial<HubLog>;
   onStatus?: (status: HubStatus) => void;
   fetch?: typeof fetch;
@@ -134,9 +154,16 @@ export class HubClient {
   private readonly fetchFn: typeof fetch;
   private running = false;
   private loop: Promise<void> | undefined;
-  private current: HubStatus = { state: 'off', message: null, lastSyncAt: null, cards: 0 };
+  private current: HubStatus = { state: 'off', message: null, lastSyncAt: null, cards: 0, assets: 0 };
   private session: string | null = null;
   private readonly sent = new SentHashes();
+  /** The hub takes images (said so in the last welcome). */
+  private takesAssets = false;
+  /** Images the hub holds, by path → hash; and the ones it refused, so they are not sent again unchanged. */
+  private readonly assetsHeld = new Map<string, string>();
+  private readonly assetsRefused = new Map<string, string>();
+  /** Hashes by path, reused while a file's size and mtime stand. */
+  private readonly assetHashes = new Map<string, { key: string; hash: string }>();
   private readonly answered = new Map<string, { at: number; ack: Promise<IntentAck> }>();
   /** Hub writes run one after another, so events never overtake a reconcile. */
   private chain: Promise<unknown> = Promise.resolve();
@@ -229,7 +256,9 @@ export class HubClient {
 
   /** Hello with every card's hash; send the texts the hub asks for. Afterwards the hub holds the board. */
   private async reconcile(): Promise<void> {
-    const texts = this.outgoing(cardTexts(await this.o.files()));
+    const whole = cardTexts(await this.o.files());
+    const texts = this.outgoing(whole);
+    const assets = await this.digests(whole);
     const hello: HelloMessage = {
       type: 'hello',
       protocol: HUB_PROTOCOL_VERSION,
@@ -238,6 +267,7 @@ export class HubClient {
       columns: [...this.o.columns()],
       cards: texts.map(({ id, path, hash }) => ({ id, path, hash })),
       ...(this.o.fieldsOnly ? { fieldsOnly: true } : {}),
+      ...(assets && this.o.assets ? { assets, images: this.o.assets.images } : {}),
     };
     const answer = (await this.post(HUB_PATHS.hello, hello, { session: false })) as WelcomeMessage | RefusedMessage | null;
     if (!answer || answer.type !== 'welcome') throw new HubRequestError('The hub did not answer the hello with a welcome.');
@@ -252,8 +282,99 @@ export class HubClient {
     for (const batch of batches(cards, (c) => c.text.length)) await this.post(HUB_PATHS.events, { messages: [{ type: 'cards', cards: batch }] });
     this.sent.clear();
     for (const c of texts) this.sent.sent(c.id, c.hash);
-    this.current = { ...this.current, lastSyncAt: Date.now(), cards: texts.length };
-    this.log.info(`Hub: reconciled ${texts.length} card(s), sent ${cards.length}${this.o.fieldsOnly ? ', titles and fields only' : ''}`);
+    const uploaded = await this.reconcileAssets(assets, answer);
+    this.current = { ...this.current, lastSyncAt: Date.now(), cards: texts.length, assets: this.assetsHeld.size };
+    const images = assets ? (this.takesAssets ? `, ${this.assetsHeld.size} image(s), uploaded ${uploaded}` : ', images not taken by this hub') : '';
+    this.log.info(`Hub: reconciled ${texts.length} card(s), sent ${cards.length}${images}${this.o.fieldsOnly ? ', titles and fields only' : ''}`);
+  }
+
+  /**
+   * The digests of the images the cards refer to, for the hello; null when
+   * none are to be sent (no source, or titles and fields only). A missing
+   * file is left out: the hub's board shows it broken, as VS Code would.
+   */
+  private async digests(cards: readonly CardText[]): Promise<AssetDigest[] | null> {
+    const src = this.o.assets;
+    if (!src || this.o.fieldsOnly) return null;
+    const out: AssetDigest[] = [];
+    for (const path of assetRefs(cards, src.images.folder)) {
+      const s = await src.stat(path);
+      if (!s) continue;
+      const key = `${s.size}:${s.mtimeMs}`;
+      let known = this.assetHashes.get(path);
+      if (!known || known.key !== key) {
+        known = { key, hash: createHash('sha256').update(await src.read(path)).digest('hex') };
+        this.assetHashes.set(path, known);
+      }
+      out.push({ path, hash: known.hash, size: s.size });
+    }
+    return out;
+  }
+
+  /** After a welcome: note whether the hub takes images, and send the ones it asked for. Returns how many went up. */
+  private async reconcileAssets(assets: AssetDigest[] | null, welcome: WelcomeMessage): Promise<number> {
+    this.takesAssets = assets !== null && welcome.assets === true;
+    this.assetsHeld.clear();
+    if (!assets || !this.takesAssets) return 0;
+    const byPath = new Map(assets.map((a) => [a.path, a]));
+    const need = new Set(welcome.needAssets ?? []);
+    let uploaded = 0;
+    for (const a of assets) {
+      if (!need.has(a.path)) {
+        this.assetsHeld.set(a.path, a.hash);
+        continue;
+      }
+      if (this.assetsRefused.get(a.path) === a.hash) continue;
+      if (await this.upload(byPath.get(a.path)!)) uploaded++;
+    }
+    return uploaded;
+  }
+
+  /** The images these cards refer to that the hub does not hold yet, sent one by one. */
+  private async uploadNew(cards: readonly CardText[]): Promise<void> {
+    if (!this.takesAssets) return;
+    const digests = await this.digests(cards);
+    for (const a of digests ?? []) {
+      if (this.assetsHeld.get(a.path) === a.hash || this.assetsRefused.get(a.path) === a.hash) continue;
+      await this.upload(a);
+    }
+  }
+
+  /** One image to the hub. False when the hub refused it (logged, not retried unchanged); throws when the request failed. */
+  private async upload(a: AssetDigest): Promise<boolean> {
+    const src = this.o.assets!;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), this.t.uploadTimeoutMs);
+    try {
+      const bytes = await src.read(a.path);
+      const path = `${HUB_PATHS.assets}/${a.path.split('/').map(encodeURIComponent).join('/')}`;
+      const res = await this.fetchFn(this.url(path), {
+        method: 'PUT',
+        headers: this.headers({ 'content-type': assetMediaType(a.path), 'content-length': String(bytes.byteLength) }),
+        body: new Blob([bytes as Uint8Array<ArrayBuffer>]),
+        signal: abort.signal,
+      });
+      if (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 403 && res.status !== 409) {
+        const text = await res.text().catch(() => '');
+        this.log.warn(`Hub: image ${a.path} not taken (HTTP ${res.status}${text ? ` ${text.slice(0, 200)}` : ''})`);
+        this.assetsRefused.set(a.path, a.hash);
+        return false;
+      }
+      if (!res.ok) await this.failed(path, res);
+      await res.text().catch(() => '');
+      this.assetsHeld.set(a.path, a.hash);
+      this.assetsRefused.delete(a.path);
+      this.log.info(`Hub: uploaded ${a.path} (${Math.round(a.size / 1024)} KB)`);
+      return true;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        this.log.warn(`Hub: image ${a.path} is gone; not sent`);
+        return false;
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The cards as they go up: whole, or cut down to titles and fields when the client shares no text. */
@@ -265,15 +386,22 @@ export class HubClient {
   /** Send what changed since the hub last saw the board, by hash. Before a session exists the reconcile covers it. */
   private async flush(): Promise<void> {
     if (!this.session) return;
-    const texts = this.outgoing(cardTexts(await this.o.files()));
+    const whole = cardTexts(await this.o.files());
+    const texts = this.outgoing(whole);
     const messages: ClientMessage[] = [];
     const live = new Set<string>();
-    for (const card of texts) {
+    const changed: CardText[] = [];
+    for (const [i, card] of texts.entries()) {
       live.add(card.id);
-      if (this.sent.shouldSend(card.id, card.hash)) messages.push({ type: this.sent.has(card.id) ? 'changed' : 'created', card });
+      if (this.sent.shouldSend(card.id, card.hash)) {
+        messages.push({ type: this.sent.has(card.id) ? 'changed' : 'created', card });
+        changed.push(whole[i]!);
+      }
     }
     for (const id of this.sent.ids()) if (!live.has(id)) messages.push({ type: 'deleted', id });
     if (messages.length === 0) return;
+    // The images a changed card newly refers to go first, so nobody sees the card with a broken image.
+    await this.uploadNew(changed);
     for (const batch of batches(messages, (m) => ('card' in m ? m.card.text.length : 0))) await this.post(HUB_PATHS.events, { messages: batch });
     for (const m of messages) {
       if (m.type === 'deleted') this.sent.forget(m.id);
@@ -344,7 +472,10 @@ export class HubClient {
       this.log.info(`Hub: intent ${intent.intentId} repeated, answering as before`);
     }
     const ack = await known.ack;
-    await this.enqueue(() => this.post(HUB_PATHS.events, { messages: [{ type: 'ack', ack }] })).catch((e) => this.breakStream(e));
+    await this.enqueue(async () => {
+      if (ack.ok) await this.uploadNew([ack.card]).catch((e) => this.log.warn(`Hub: images for ${ack.card.path} not sent: ${describe(e)}`));
+      await this.post(HUB_PATHS.events, { messages: [{ type: 'ack', ack }] });
+    }).catch((e) => this.breakStream(e));
   }
 
   private async applyIntent(intent: HubIntent): Promise<IntentAck> {

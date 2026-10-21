@@ -1,13 +1,15 @@
 import { existsSync, readFileSync, watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
-import type { SocketRecord } from '@kanban-bananas/core';
-import { HubClient, readBoardDir, repoIdentityFor, type HubStatus } from '@kanban-bananas/core/node';
+import { DEFAULT_IMAGES_FOLDER, type SocketRecord } from '@kanban-bananas/core';
+import { fsAssetSource, HubClient, readBoardDir, repoIdentityFor, type HubStatus } from '@kanban-bananas/core/node';
 import { UsageError, type Project } from './project.js';
 
 /**
  * `kanban sync`: keep a project hub's copy of the board current from a machine
  * where VS Code is not open (a server, a cron job). Read-only: the hub's
- * intents are refused with a pointer to VS Code, which is the writer. While
+ * intents are refused with a pointer to VS Code, which is the writer. The
+ * images the cards refer to (`<root>/.devtool/assets/…`) go up too, unless
+ * `--fields-only`. While
  * the extension runs in this project (its socket record names a live
  * process), the command waits, since the extension syncs itself.
  */
@@ -79,6 +81,7 @@ export async function runSync(project: Project, io: SyncIo, opts: SyncOptions): 
     columns: () => columns,
     files: () => readBoardDir(project.features),
     ...(opts.fieldsOnly ? { fieldsOnly: true } : {}),
+    assets: fsAssetSource(project.root, { folder: DEFAULT_IMAGES_FOLDER, format: 'webp', maxWidth: 0 }),
     log: { info: say, warn: (m) => io.stderr(`${m}\n`), error: (m) => io.stderr(`${m}\n`) },
     onStatus: (s: HubStatus) => say(`sync: ${s.state}${s.message ? ` (${s.message})` : ''}`),
     ...(opts.fetch ? { fetch: opts.fetch } : {}),
@@ -87,7 +90,7 @@ export async function runSync(project: Project, io: SyncIo, opts: SyncOptions): 
 
   if (opts.once) {
     await client.syncOnce();
-    say(`sync: the hub holds ${client.status().cards} card(s)`);
+    say(`sync: the hub holds ${client.status().cards} card(s)${client.status().assets ? ` and ${client.status().assets} image(s)` : ''}`);
     return;
   }
 

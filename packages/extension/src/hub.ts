@@ -1,5 +1,5 @@
 import { BodyConflictError, idForFilename, IntentError, PatchError, staleFields, type CardText, type HubIntent, type IntentAck } from '@kanban-bananas/core';
-import { cardHash, ConflictError, HubClient, repoIdentityFor, type HubStatus, type WriteResult } from '@kanban-bananas/core/node';
+import { cardHash, ConflictError, fsAssetSource, HubClient, repoIdentityFor, type HubStatus, type WriteResult } from '@kanban-bananas/core/node';
 import * as vscode from 'vscode';
 import type { BoardController } from './controller.js';
 import { log } from './log.js';
@@ -32,7 +32,7 @@ export class HubHost implements vscode.Disposable {
       controller.onDidStart(() => this.restart()),
       controller.onDidChange(() => this.client?.notifyChanged()),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration(`${SECTION}.hub`)) this.restart();
+        if (e.affectsConfiguration(`${SECTION}.hub`) || e.affectsConfiguration(`${SECTION}.images`)) this.restart();
         else if (e.affectsConfiguration(`${SECTION}.columns`)) this.client?.notifyColumns();
       }),
       secrets.onDidChange((e) => {
@@ -77,6 +77,9 @@ export class HubHost implements vscode.Disposable {
       return;
     }
     const repo = repoIdentityFor(root.fsPath);
+    // The images cards refer to are read from the workspace folder, where the links are rooted.
+    const folder = vscode.workspace.getWorkspaceFolder(root);
+    const s = this.controller.settingsNow;
     this.client = new HubClient({
       hub: { url, token },
       repo,
@@ -85,6 +88,7 @@ export class HubHost implements vscode.Disposable {
       files: () => this.controller.boardFiles(),
       apply: (intent) => this.apply(intent),
       fieldsOnly: !this.shareText(),
+      ...(folder ? { assets: fsAssetSource(folder.uri.fsPath, { folder: s.imagesFolder, ...s.view.images }) } : {}),
       log: { info: (m) => log.info(m), warn: (m) => log.warn(m), error: (m) => log.error(m) },
       onStatus: (s) => this.renderStatus(s),
     });
@@ -158,7 +162,7 @@ export class HubHost implements vscode.Disposable {
     this.status = s;
     const icon = { off: '$(cloud)', connecting: '$(sync~spin)', connected: '$(cloud)', offline: '$(cloud-offline)', refused: '$(warning)' }[s.state];
     const text = { off: 'Hub', connecting: 'Hub…', connected: 'Hub', offline: 'Hub: offline', refused: 'Hub: refused' }[s.state];
-    const when = s.lastSyncAt ? `Last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}, ${s.cards} card(s).` : 'Not synced yet.';
+    const when = s.lastSyncAt ? `Last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}, ${s.cards} card(s)${s.assets ? `, ${s.assets} image(s)` : ''}.` : 'Not synced yet.';
     this.showText(`${icon} ${text}`, `${this.url()}\n${s.state}${s.message ? `: ${s.message}` : ''}\n${when}`);
   }
 

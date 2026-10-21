@@ -32,14 +32,44 @@ import type { ColumnConfig } from './view.js';
  * - `POST events` with `{ messages: ClientMessage[] }`; acks travel here too.
  * - `GET stream` is a server-sent event stream of `HubMessage`s, one JSON
  *   object per `data:` line; comment lines keep the connection alive.
- * `welcome.session` names the connection; `events` and `stream` carry it in
- * the `X-Hub-Session` header so the hub knows which repo they belong to.
+ * - `PUT assets/<path>` (the path's segments URL-encoded) with the image's
+ *   bytes as the body and its media type as `Content-Type` stores one image
+ *   the cards refer to (`HelloMessage.assets`); it answers 200 with
+ *   `{ path, hash, size }`, 413 when too large, 415 when not an image the hub
+ *   takes. Only after a `welcome` that says `assets: true`.
+ * `welcome.session` names the connection; `events`, `stream` and `assets`
+ * carry it in the `X-Hub-Session` header so the hub knows which repo they
+ * belong to.
  */
 
 export const HUB_PROTOCOL_VERSION = 1;
 
-export const HUB_PATHS = { hello: 'hello', events: 'events', stream: 'stream' } as const;
+export const HUB_PATHS = { hello: 'hello', events: 'events', stream: 'stream', assets: 'assets' } as const;
 export const HUB_SESSION_HEADER = 'x-hub-session';
+
+/**
+ * Image types a hub stores and serves (`HelloMessage.assets`): the ones the
+ * board pastes, verified from their bytes on the hub. Never SVG, which can
+ * carry script; a card's SVG stays a broken image on the hub's board.
+ */
+export const HUB_ASSET_EXTENSIONS = ['png', 'webp', 'jpg', 'jpeg', 'gif'] as const;
+
+/** One image the cards refer to: its path, the SHA-256 of its bytes as hex (its version), its size in bytes. */
+export interface AssetDigest {
+  /** Relative to the repo root, `/`-separated, as the card's link without the leading `/`: `.devtool/assets/<card>/x.webp`. */
+  path: string;
+  hash: string;
+  size: number;
+}
+
+/** How the client's board stores pasted images, so a hub that takes a paste from its page converts alike. */
+export interface HubImageSettings {
+  /** The images folder relative to the repo root (`.devtool/assets`); every asset path is under it. */
+  folder: string;
+  format: 'webp' | 'png';
+  /** 0 keeps the width. */
+  maxWidth: number;
+}
 
 /** Which board this is: the git remote as `normalizeRemote` writes it, and the features directory inside the repo. */
 export interface RepoIdentity {
@@ -92,6 +122,17 @@ export type HelloMessage = {
    * never sends cut-down texts to it. Absent or false: whole texts, as always.
    */
   fieldsOnly?: boolean;
+  /**
+   * The images the shared cards refer to (`assetRefs`), so the hub can show
+   * them: present when the client can send images and shares text (never with
+   * `fieldsOnly`). A hub that takes them echoes `assets: true` and lists the
+   * ones it lacks in `needAssets`; the client then uploads those (`PUT
+   * assets/<path>`) and, from then on, every image a changed card newly refers
+   * to, before the card. A hub that does not echo it gets no uploads.
+   */
+  assets?: AssetDigest[];
+  /** With `assets`: how this board stores pasted images. */
+  images?: HubImageSettings;
 };
 
 /** Client → hub. */
@@ -128,6 +169,10 @@ export type WelcomeMessage = {
   need: string[];
   /** True when the hello asked for titles and fields only and the hub takes it. */
   fieldsOnly?: boolean;
+  /** True when the hello listed assets and the hub stores images. */
+  assets?: true;
+  /** With `assets`: the paths the hub lacks or holds in another version, in the hello's order. */
+  needAssets?: string[];
 };
 
 export type HubMessage =

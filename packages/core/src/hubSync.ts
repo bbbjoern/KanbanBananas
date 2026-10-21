@@ -1,4 +1,5 @@
-import type { CardDigest, CardText, ClientMessage, Expectation, HubIntent } from './hubProtocol.js';
+import { imageRefs } from './assets.js';
+import { HUB_ASSET_EXTENSIONS, type AssetDigest, type CardDigest, type CardText, type ClientMessage, type Expectation, type HubIntent } from './hubProtocol.js';
 import { parseCard, type CardFields, type KnownField } from './parse.js';
 import type { FieldValue } from './patch.js';
 
@@ -23,6 +24,61 @@ export function reconcile(mirror: readonly CardDigest[], current: readonly CardD
   }
   const live = new Set(current.map((d) => d.id));
   const gone = mirror.filter((d) => !live.has(d.id)).map((d) => d.id);
+  return { need, gone };
+}
+
+/**
+ * The images the hub should hold for these cards (`HelloMessage.assets`): the
+ * root-relative image links in the texts (`imageRefs`), kept to the images
+ * folder, to the types a hub takes (`HUB_ASSET_EXTENSIONS`) and to plain
+ * paths (segments of letters, digits, `.`, `_`, `-`, `@`, spaces: what the board
+ * and a careful hand name files), each once, in first-seen order. Links
+ * elsewhere in the repo, web links and SVGs are not sent: the hub's board
+ * shows those as VS Code's preview would without the file.
+ */
+export function assetRefs(cards: readonly { text: string }[], folder: string): string[] {
+  const root = folder.replace(/^\/+|\/+$/g, '');
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const { text } of cards) {
+    for (const ref of imageRefs(text)) {
+      if (seen.has(ref) || !assetPathOk(ref, root)) continue;
+      seen.add(ref);
+      out.push(ref);
+    }
+  }
+  return out;
+}
+
+const SEGMENT = /^[\w.@ -]+$/;
+
+/** Is `path` an asset path a hub takes: under the images folder, plain segments, no `..`, an image extension? */
+export function assetPathOk(path: string, folder: string): boolean {
+  if (path.length > 400 || path.includes('\\')) return false;
+  const segments = path.split('/');
+  if (segments.some((s) => s === '' || s === '.' || s === '..' || !SEGMENT.test(s))) return false;
+  const prefix = folder.split('/').filter(Boolean);
+  if (segments.length <= prefix.length || prefix.some((p, i) => segments[i] !== p)) return false;
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return path.lastIndexOf('.') > path.lastIndexOf('/') && (HUB_ASSET_EXTENSIONS as readonly string[]).includes(ext);
+}
+
+/** The media type of an asset by its extension (the hub verifies the bytes anyway). */
+export function assetMediaType(path: string): string {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+}
+
+/**
+ * Like `reconcile`, for assets by path: `need` the paths the hub lacks or
+ * holds under another hash, in the client's order; `gone` the paths it holds
+ * that no card refers to any more.
+ */
+export function reconcileAssets(held: readonly AssetDigest[], current: readonly AssetDigest[]): { need: string[]; gone: string[] } {
+  const have = new Map(held.map((d) => [d.path, d.hash]));
+  const need = current.filter((d) => have.get(d.path) !== d.hash).map((d) => d.path);
+  const live = new Set(current.map((d) => d.path));
+  const gone = held.filter((d) => !live.has(d.path)).map((d) => d.path);
   return { need, gone };
 }
 
