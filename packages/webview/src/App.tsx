@@ -20,11 +20,13 @@ import { CopyPath } from './CopyPath.js';
 import { checkConnection, onReconnect, request, useConnected } from './connection.js';
 import { DetailPane, MemoryPane } from './DetailPane.js';
 import { PendingCardList, usePendingCards } from './pendingCards.js';
+import { NO_HUB, type HubState } from './requestState.js';
+import { HubProvider, RequestNote, RequestPlaceholders, useCardRequest, useHub } from './requests.js';
 import { MemoryWidget, type MemorySummary } from './MemoryWidget.js';
 import { formatDue } from './dates.js';
 import { distinct, filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
-import { onHostMessage, vscode } from './vscode.js';
+import { hubMode, onHostMessage, vscode } from './vscode.js';
 
 export type Layout = 'panel' | 'sidebar';
 
@@ -71,6 +73,9 @@ export function App({ layout }: { layout: Layout }) {
   const [memory, setMemory] = useState<MemorySummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noBoard, setNoBoard] = useState<{ featuresDirectory: string; folderOpen: boolean } | null>(null);
+  // Hub mode: can the board be changed now, and what became of the changes asked for (requests.tsx).
+  const [hub, setHub] = useState<HubState>(NO_HUB);
+  const readOnly = hub.readOnly;
   // The page's own state survives hiding; the host's copy survives closing the board and reloading.
   const saved = (vscode.getState() ?? (window as { __KANBAN_UI_STATE__?: unknown }).__KANBAN_UI_STATE__ ?? undefined) as UiState | undefined;
   const [collapsed, setCollapsed] = useState<string[]>(saved?.collapsed ?? []);
@@ -112,6 +117,8 @@ export function App({ layout }: { layout: Layout }) {
         setSelected(m.id);
       } else if (m.type === 'searchResults') {
         if (m.query === queryRef.current) setSearchIds(new Set(m.ids));
+      } else if (m.type === 'hubState') {
+        setHub({ readOnly: m.readOnly, machine: m.machine, requests: m.requests });
       }
       // Editor messages are handled by the inline editor itself.
     });
@@ -139,7 +146,7 @@ export function App({ layout }: { layout: Layout }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'n' && e.key !== 'N') return;
-      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || readOnly || isTyping(e.target)) return;
       const status = settings?.defaultStatus || settings?.columns[0]?.id;
       if (status) {
         e.preventDefault();
@@ -148,13 +155,14 @@ export function App({ layout }: { layout: Layout }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [settings]);
+  }, [settings, readOnly]);
 
   const toggle = (id: string) => {
     setCollapsed(collapsed.includes(id) ? collapsed.filter((c) => c !== id) : [...collapsed, id]);
   };
 
   const cardsById = useMemo(() => new Map((board?.cards ?? []).map((c) => [c.fields.id!, c])), [board]);
+  const hubValue = useMemo(() => ({ ...hub, onBoard: (id: string) => cardsById.has(id) }), [hub, cardsById]);
   const visible = useMemo(() => {
     const now = new Date();
     return (board?.cards ?? []).filter((c) => passes(c, filters, now, query ? searchIds : null));
@@ -261,6 +269,7 @@ export function App({ layout }: { layout: Layout }) {
     layout === 'panel' ? setSelected(card.fields.id!) : vscode.postMessage({ type: 'openCard', path: card.path });
 
   return (
+    <HubProvider value={hubValue}>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
@@ -276,11 +285,17 @@ export function App({ layout }: { layout: Layout }) {
       <div className="board-area">
       {!connected && (
         <div className="offline" role="alert">
+          {hubMode ? (
+            <p>
+              <strong>The board lost its connection to the page.</strong> Changes made now aren't saved. Reload the page.
+            </p>
+          ) : (
           <p>
             <strong>Not connected to KanbanBananas.</strong> Changes made now aren't saved. This usually happens after
             the computer slept or the remote connection dropped; it reconnects by itself when it can.
             If it doesn't, run <em>Developer: Reload Window</em>.
           </p>
+          )}
           <button type="button" className="tool" onClick={checkConnection}>
             Check again
           </button>
@@ -294,6 +309,7 @@ export function App({ layout }: { layout: Layout }) {
         groupBy={groupBy}
         onGroupBy={setGroupBy}
         shown={visible.length}
+        hub={hubMode}
       />
       {lanes ? (
         <LaneBoard
@@ -339,7 +355,7 @@ export function App({ layout }: { layout: Layout }) {
             onOpen={onOpen}
           />
         ))}
-        {layout === 'panel' && <AddColumn />}
+        {layout === 'panel' && !hubMode && <AddColumn />}
       </div>
       )}
       </div>
@@ -371,6 +387,7 @@ export function App({ layout }: { layout: Layout }) {
       </div>
       <DragOverlay>{active && <CardBody card={active} settings={settings} dragging onOpen={() => {}} />}</DragOverlay>
     </DndContext>
+    </HubProvider>
   );
 }
 
@@ -399,6 +416,7 @@ function LaneBoard(props: {
   broken: BrokenView[];
 }) {
   const { settings, columns, field } = props;
+  const { readOnly } = useHub();
   const configured = settings.lanes?.[field] ?? [];
   // Lane reordering uses the browser's own drag and drop on the lane handle, separate from card dragging.
   // `undefined` = not dragging; null = dragging the "none" lane.
@@ -438,18 +456,20 @@ function LaneBoard(props: {
                 total={props.filtering ? props.totals.get(col.id) ?? 0 : null}
                 collapsed={collapsed}
                 onToggle={() => props.onToggle(col.id)}
-                {...(collapsed ? {} : { onAdd: () => props.onAdd(col.id) })}
+                {...(collapsed || readOnly ? {} : { onAdd: () => props.onAdd(col.id) })}
               />
-              {props.adding === col.id && (
+              {props.adding === col.id && !readOnly && (
                 <div className="cards">
                   <NewCardForm status={col.id} onDone={() => props.onAdd(null)} />
                 </div>
               )}
               <PendingCardList status={col.id} wrapped />
+              <RequestPlaceholders status={col.id} wrapped />
             </section>
           );
         })}
       </div>
+      {!hubMode && (
       <div className="lane-bar">
         <button type="button" className="tool new-lane" onClick={() => vscode.postMessage({ type: 'laneCommand', action: 'new', field })}>
           + New swimlane
@@ -460,6 +480,7 @@ function LaneBoard(props: {
           </span>
         )}
       </div>
+      )}
       {props.lanes.map((value) => {
         const key = `#lane:${field}:${value ?? NO_VALUE}`;
         const collapsed = props.collapsed.includes(key);
@@ -546,6 +567,7 @@ function LaneHeader(props: {
         if (props.dragging !== undefined) props.onDropLane(props.dragging);
       }}
     >
+      {!hubMode && (
       <span
         className="lane-grip"
         draggable
@@ -560,6 +582,7 @@ function LaneHeader(props: {
       >
         ⋮⋮
       </span>
+      )}
       <Chevron collapsed={props.collapsed} onToggle={props.onToggle} label={`lane ${label}`} />
       <span className="lane-swatch" aria-hidden />
       {editing ? (
@@ -579,7 +602,7 @@ function LaneHeader(props: {
           }}
           aria-label={`New name for lane ${label}`}
         />
-      ) : value !== null ? (
+      ) : value !== null && !hubMode ? (
         <button
           type="button"
           className="name lane-name"
@@ -650,11 +673,13 @@ function Column(props: {
   onOpen: (card: CardView) => void;
 }) {
   const { column, cards, collapsed, settings } = props;
+  const { readOnly } = useHub();
   const { setNodeRef } = useDroppable({ id: COLUMN_PREFIX + column.id });
   const form = (
     <>
-      {props.adding && <NewCardForm status={column.id} onDone={props.onAddDone} />}
+      {props.adding && !readOnly && <NewCardForm status={column.id} onDone={props.onAddDone} />}
       <PendingCardList status={column.id} />
+      <RequestPlaceholders status={column.id} />
     </>
   );
   return (
@@ -668,7 +693,7 @@ function Column(props: {
         total={props.total}
         collapsed={collapsed}
         onToggle={props.onToggle}
-        onAdd={props.onAdd}
+        {...(readOnly ? {} : { onAdd: props.onAdd })}
       />
       {!collapsed && (
         <SortableContext items={cards.map((c) => c.fields.id!)} strategy={verticalListSortingStrategy}>
@@ -747,7 +772,10 @@ function ColumnHeader(props: {
   onAdd?: () => void;
   drag?: ColumnDrag;
 }) {
-  const { status, drag } = props;
+  const { status } = props;
+  // Hub mode: reordering and renaming columns are VS Code's (they write the project's settings).
+  const drag = hubMode ? undefined : props.drag;
+  const renames = !!status && !hubMode;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(props.name);
   const [over, setOver] = useState(false);
@@ -808,7 +836,7 @@ function ColumnHeader(props: {
             }}
             aria-label={`New name for column ${props.name}`}
           />
-        ) : status ? (
+        ) : renames ? (
           <button
             type="button"
             className="name column-name"
@@ -912,16 +940,22 @@ function NewCardForm({ status, onDone }: { status: string; onDone: () => void })
 
 function SortableCard(props: { card: CardView; settings: ViewSettings; selected: boolean; onOpen: (card: CardView) => void }) {
   const { card, settings } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.fields.id! });
+  // Hub mode: nothing drags while the machine is away, and a change asked for this card shows its state with a note under it.
+  const { readOnly } = useHub();
+  const request = useCardRequest(card.fields.id);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.fields.id!, disabled: readOnly });
+  const className = [isDragging ? 'drag-source' : '', request ? `request-card request-${request.state}` : ''].filter(Boolean).join(' ');
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? 'drag-source' : undefined}
-      {...attributes}
+      className={className || undefined}
+      // Read-only: no sortable role or aria-disabled on a card that still opens.
+      {...(readOnly ? {} : attributes)}
       {...listeners}
     >
       <CardBody card={card} settings={settings} selected={props.selected} onOpen={props.onOpen} />
+      {request && <RequestNote request={request} />}
     </div>
   );
 }
@@ -1010,6 +1044,7 @@ function BrokenLane(props: { broken: BrokenView[]; collapsed: boolean; onToggle:
               type="button"
               className="card"
               title={b.path}
+              disabled={hubMode}
               onClick={() => vscode.postMessage({ type: 'openCard', path: b.path })}
             >
               <div className="title">{b.title ?? b.filename}</div>

@@ -120,7 +120,13 @@ export type HostMessage =
   /** Open this card in the split view (from "Show on Board"). */
   | { type: 'selectCard'; id: string }
   /** The card went away (deleted, broken, renamed): close the editor. */
-  | { type: 'editorClosed'; id: string; reason: string };
+  | { type: 'editorClosed'; id: string; reason: string }
+  /**
+   * Hub mode only (BoardHostOptions): whether the board can be changed right
+   * now, the machine that owns the files, and every change asked of it with
+   * its state. The whole list each time; the board draws it on the cards.
+   */
+  | { type: 'hubState'; readOnly: boolean; machine: string | null; requests: CardRequest[] };
 
 /**
  * Messages from the board webview to the extension host: intents, never whole cards (spec §2.1).
@@ -174,7 +180,76 @@ export type WebviewMessage = { requestId?: string } & (
   | { type: 'editorShown'; id: string }
   /** Is the extension still there? Answered with an ack. */
   | { type: 'ping' }
+  /** Hub mode: a button under a request was pressed (`action` is one of the request's `actions`). */
+  | { type: 'requestAction'; request: string; action: string }
 );
+
+/**
+ * A change a hub host asked the machine for, as the board shows it (hub mode).
+ * The host owns the list and sends it whole with every `hubState`. The board
+ * draws the state on the card, shows the note and the buttons under it, and
+ * reports a press as `requestAction`. A request whose card isn't on the board
+ * (a card being created, or one that is gone) shows as a card of its own in
+ * `placeholder.status`.
+ */
+export interface CardRequest {
+  /** The host's id for the request (the hub's intent id). */
+  id: string;
+  /** The card it concerns; null for a card that doesn't exist yet. */
+  cardId: string | null;
+  state: CardRequestState;
+  /** When it was sent, in ms since the epoch: a pending request shows "Waiting for…" only after a second. */
+  since: number;
+  /** Shown under the card, e.g. "Not moved: it changed in VS Code meanwhile." */
+  note?: string;
+  /** Buttons under the note; a press comes back as `requestAction` with the action's id. */
+  actions?: CardRequestAction[];
+  /** Title and column for a request whose card isn't on the board. */
+  placeholder?: { title: string; status: string };
+}
+
+/**
+ * pending: sent, no answer yet · applied: done (the host shows it briefly, then drops it) ·
+ * stale: refused, a field it depends on changed meanwhile · conflict: a body save overlapped
+ * someone else's change · gone: the card was deleted or renamed · expired: dropped unanswered.
+ */
+export type CardRequestState = 'pending' | 'applied' | 'stale' | 'conflict' | 'gone' | 'expired';
+
+export interface CardRequestAction {
+  id: string;
+  label: string;
+}
+
+/**
+ * What a page that shows the board outside VS Code provides, as
+ * `window.kanbanBananasHost`, before the bundle loads. The board then talks to
+ * it instead of VS Code's webview API: `postMessage` carries its
+ * `WebviewMessage`s to the host, `onMessage` delivers the host's
+ * `HostMessage`s. The host acks every message that has a `requestId`, as the
+ * extension does; an ack means the host took the change, not that the machine
+ * applied it (that comes through `hubState`).
+ */
+export interface BoardHost {
+  postMessage(message: WebviewMessage): void;
+  onMessage(handler: (message: HostMessage) => void): () => void;
+  /** The page's view state across reloads (VS Code's getState/setState); optional. */
+  getState?(): unknown;
+  setState?(state: unknown): void;
+  options?: BoardHostOptions;
+}
+
+export interface BoardHostOptions {
+  /**
+   * `hub`: the board is a host's copy of a repo's cards, changed only through
+   * requests to the machine that owns them. The board hides what only VS Code
+   * can do (new, renamed or reordered columns and swimlanes, the settings,
+   * opening files, the label commands) and follows `hubState`. `vscode` (the
+   * default) is the board as in the extension.
+   */
+  mode?: 'vscode' | 'hub';
+  /** The page's CSP nonce, for the style elements the editor adds to the document. */
+  cspNonce?: string;
+}
 
 const EXCERPT_LENGTH = 160;
 

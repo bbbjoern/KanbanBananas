@@ -7,7 +7,7 @@ import { addLabels, labelToAdd, suggestLabels } from './labels.js';
  * isn't added twice, and one that exists with other capitals keeps the board's
  * spelling. Every change is saved straight away.
  */
-export function LabelsField(props: { labels: string[]; known: string[]; onChange: (labels: string[]) => void }) {
+export function LabelsField(props: { labels: string[]; known: string[]; onChange: (labels: string[]) => void; disabled?: boolean }) {
   const [labels, setLabels] = useState(props.labels);
   const [draft, setDraft] = useState('');
   const [open, setOpen] = useState(false);
@@ -59,15 +59,18 @@ export function LabelsField(props: { labels: string[]; known: string[]; onChange
         {labels.map((l) => (
           <span key={l} className="label chip">
             {l}
-            <button type="button" aria-label={`Remove label ${l}`} title="Remove" onClick={() => remove(l)}>
-              ×
-            </button>
+            {!props.disabled && (
+              <button type="button" aria-label={`Remove label ${l}`} title="Remove" onClick={() => remove(l)}>
+                ×
+              </button>
+            )}
           </span>
         ))}
         <input
           ref={input}
           value={draft}
-          placeholder={labels.length ? '' : 'Add labels'}
+          placeholder={labels.length || props.disabled ? '' : 'Add labels'}
+          disabled={props.disabled}
           role="combobox"
           aria-labelledby={`${listId}-label`}
           aria-expanded={open && options.length > 0}

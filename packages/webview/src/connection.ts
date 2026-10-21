@@ -1,6 +1,6 @@
 import type { HostMessage, WebviewMessage } from '@kanban-bananas/core';
 import { useSyncExternalStore } from 'react';
-import { vscode } from './vscode.js';
+import { onHostMessage, vscode } from './vscode.js';
 
 /**
  * Is the extension still listening? The page can outlive its connection: over
@@ -55,9 +55,8 @@ export function markDisconnected(): void {
   setConnected(false);
 }
 
-/** Any message from the extension shows it's there. */
-function onMessage(e: MessageEvent<HostMessage>): void {
-  const m = e.data;
+/** Any message from the host shows it's there. */
+function onMessage(m: HostMessage): void {
   if (!m || typeof m !== 'object') return;
   setConnected(true);
   if (m.type === 'ack') {
@@ -88,7 +87,7 @@ let started = false;
 export function startConnectionChecks(): void {
   if (started) return;
   started = true;
-  window.addEventListener('message', onMessage);
+  onHostMessage(onMessage);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') checkConnection();
   });

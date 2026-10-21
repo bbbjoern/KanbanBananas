@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // No DOM in these tests: a window and document that are just event targets.
 const sent: { type: string; requestId?: string }[] = [];
-vi.mock('./vscode.js', () => ({ vscode: { postMessage: (m: { type: string }) => sent.push(m) } }));
+vi.mock('./vscode.js', () => ({
+  vscode: { postMessage: (m: { type: string }) => sent.push(m) },
+  // The transport delivers host messages; here they are window events, as in VS Code.
+  onHostMessage: (handler: (m: unknown) => void) => {
+    const listener = (e: Event) => handler((e as Event & { data: unknown }).data);
+    win.addEventListener('message', listener);
+    return () => win.removeEventListener('message', listener);
+  },
+}));
 
 const win = new EventTarget();
 const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' });

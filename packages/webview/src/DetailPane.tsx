@@ -5,7 +5,8 @@ import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
 import { InlineEditor } from './editor/InlineEditor.js';
 import { LabelsField } from './LabelsField.js';
-import { vscode } from './vscode.js';
+import { useHub } from './requests.js';
+import { hubMode, vscode } from './vscode.js';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -29,6 +30,8 @@ export function DetailPane(props: {
 }) {
   const { card, settings } = props;
   const id = card.fields.id!;
+  // Hub mode while the machine is away: the fields and the text show, nothing changes.
+  const { readOnly } = useHub();
   const set = (changes: Record<string, string | string[] | null>) => void request({ type: 'setFields', id, changes });
   useEffect(() => {
     vscode.postMessage({ type: 'editorShown', id });
@@ -44,13 +47,17 @@ export function DetailPane(props: {
           </span>
         </div>
         <div className="detail-actions">
-          <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
-            {props.live ? 'Source' : 'Preview'}
-          </button>
+          {!hubMode && (
+            <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
+              {props.live ? 'Source' : 'Preview'}
+            </button>
+          )}
           <CopyPath path={card.path} label="Copy path" />
-          <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openCard', path: card.path })}>
-            Open file
-          </button>
+          {!hubMode && (
+            <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openCard', path: card.path })}>
+              Open file
+            </button>
+          )}
           <button
             type="button"
             className="tool icon"
@@ -72,6 +79,7 @@ export function DetailPane(props: {
           <span>Status</span>
           <select
             value={card.fields.status ?? ''}
+            disabled={readOnly}
             onChange={(e) => void request({ type: 'move', id, toStatus: e.target.value, beforeId: null })}
           >
             {settings.columns.map((c) => (
@@ -83,7 +91,7 @@ export function DetailPane(props: {
         </label>
         <label>
           <span>Priority</span>
-          <select value={card.fields.priority ?? ''} onChange={(e) => set({ priority: e.target.value || null })}>
+          <select value={card.fields.priority ?? ''} disabled={readOnly} onChange={(e) => set({ priority: e.target.value || null })}>
             {PRIORITIES.map((p) => (
               <option key={p} value={p}>
                 {p[0]!.toUpperCase() + p.slice(1)}
@@ -96,6 +104,7 @@ export function DetailPane(props: {
           <span>Type</span>
           <select
             value={card.fields.type === 'log' ? 'log' : ''}
+            disabled={readOnly}
             onChange={(e) => set({ type: e.target.value || null })}
             title="Log: a running list of entries (e.g. minor bugs) instead of a card for each"
           >
@@ -105,14 +114,14 @@ export function DetailPane(props: {
         </label>
         <label>
           <span>Due</span>
-          <input type="date" value={card.fields.dueDate?.slice(0, 10) ?? ''} onChange={(e) => set({ dueDate: e.target.value || null })} />
+          <input type="date" value={card.fields.dueDate?.slice(0, 10) ?? ''} disabled={readOnly} onChange={(e) => set({ dueDate: e.target.value || null })} />
         </label>
-        <TextField label="Assignee" value={card.fields.assignee} onCommit={(v) => set({ assignee: v || null })} />
-        <TextField label="Epic" value={card.fields.epic} onCommit={(v) => set({ epic: v || null })} />
+        <TextField label="Assignee" value={card.fields.assignee} disabled={readOnly} onCommit={(v) => set({ assignee: v || null })} />
+        <TextField label="Epic" value={card.fields.epic} disabled={readOnly} onCommit={(v) => set({ epic: v || null })} />
         {((settings.lanes?.lane.length ?? 0) > 0 || card.fields.lane) && (
-          <TextField label="Lane" value={card.fields.lane} onCommit={(v) => set({ lane: v || null })} />
+          <TextField label="Lane" value={card.fields.lane} disabled={readOnly} onCommit={(v) => set({ lane: v || null })} />
         )}
-        <LabelsField key={id} labels={card.fields.labels} known={props.knownLabels} onChange={(labels) => set({ labels })} />
+        <LabelsField key={id} labels={card.fields.labels} known={props.knownLabels} disabled={readOnly} onChange={(labels) => set({ labels })} />
       </div>
 
       <ErrorBoundary>
@@ -124,6 +133,7 @@ export function DetailPane(props: {
           images={settings.images ?? { format: 'webp', maxWidth: 0 }}
           assetBase={props.assetBase}
           log={card.fields.type === 'log'}
+          readOnly={readOnly}
           {...(settings.columns[0] ? { newCardStatus: settings.columns[0].id } : {})}
         />
       </ErrorBoundary>
@@ -153,12 +163,16 @@ export function MemoryPane(props: {
           <span className="filename">{props.file}</span>
         </div>
         <div className="detail-actions">
-          <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
-            {props.live ? 'Source' : 'Preview'}
-          </button>
-          <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openMemory' })}>
-            Open file
-          </button>
+          {!hubMode && (
+            <button type="button" className="tool" onClick={props.onToggleLive} title="Switch between live preview and plain markdown">
+              {props.live ? 'Source' : 'Preview'}
+            </button>
+          )}
+          {!hubMode && (
+            <button type="button" className="tool" onClick={() => vscode.postMessage({ type: 'openMemory' })}>
+              Open file
+            </button>
+          )}
           <button
             type="button"
             className="tool icon"
@@ -190,7 +204,7 @@ export function MemoryPane(props: {
 }
 
 /** A text input that commits on Enter or blur, and reverts on Escape. */
-function TextField(props: { label: string; value: string | null; onCommit: (v: string) => void; placeholder?: string; wide?: boolean }) {
+function TextField(props: { label: string; value: string | null; onCommit: (v: string) => void; placeholder?: string; wide?: boolean; disabled?: boolean }) {
   const [draft, setDraft] = useState(props.value ?? '');
   useEffect(() => {
     setDraft(props.value ?? '');
@@ -204,6 +218,7 @@ function TextField(props: { label: string; value: string | null; onCommit: (v: s
       <input
         value={draft}
         placeholder={props.placeholder ?? '—'}
+        disabled={props.disabled}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {

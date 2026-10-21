@@ -8,7 +8,7 @@ import { tags } from '@lezer/highlight';
 import { useEffect, useRef, useState } from 'react';
 import { BodySync } from '../bodySync.js';
 import { ACK_TIMEOUT_MS, markDisconnected, onReconnect, request } from '../connection.js';
-import { onHostMessage, vscode } from '../vscode.js';
+import { hostOptions, hubMode, onHostMessage, vscode } from '../vscode.js';
 import { assetBase, livePreview } from './livePreview.js';
 import { cardFromEntry, entryBlocksView, entryEnter, entryMenu, imagePlacement, logCard, promoteEntry, promoteEntryButton } from './entries.js';
 import { imageFiles, prepareImage } from './pasteImage.js';
@@ -31,6 +31,11 @@ const highlight = HighlightStyle.define([
 
 type Conflict = { theirs: string };
 
+/** Read-only: no typing, no cursor-as-caret; selection and search still work. */
+function editableConfig(readOnly: boolean) {
+  return [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
+}
+
 /**
  * The card body in CodeMirror, kept in step with the file by BodySync. The
  * editor is uncontrolled: React never passes the text back in, and outside
@@ -48,12 +53,15 @@ export function InlineEditor(props: {
   log?: boolean;
   /** Column for cards made from entries. */
   newCardStatus?: string;
+  /** Hub mode while the machine is away: the text shows and can be searched, not changed. */
+  readOnly?: boolean;
 }) {
   const { id } = props;
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const syncRef = useRef<BodySync | null>(null);
   const liveMode = useRef(new Compartment());
+  const editable = useRef(new Compartment());
   const baseConfig = useRef(new Compartment());
   const logMode = useRef(new Compartment());
   const logRef = useRef(!!props.log);
@@ -92,14 +100,17 @@ export function InlineEditor(props: {
         setStatus('saving');
         vscode.postMessage({ type: 'saveBody', id, base: save.base, body: save.body });
         clearTimeout(answerTimer.current);
-        answerTimer.current = setTimeout(() => {
-          // No answer: keep the text as unsaved edits; it's saved again when the connection is back.
-          if (!syncRef.current?.saving) return;
-          syncRef.current.failed();
-          setStatus('error');
-          setNotice("Not saved: VS Code isn't answering. Your text stays here and is saved as soon as the connection is back.");
-          markDisconnected();
-        }, ACK_TIMEOUT_MS);
+        // A hub answers when the machine has (its own expiry ends a save nobody answers); VS Code answers at once or is gone.
+        if (!hubMode) {
+          answerTimer.current = setTimeout(() => {
+            // No answer: keep the text as unsaved edits; it's saved again when the connection is back.
+            if (!syncRef.current?.saving) return;
+            syncRef.current.failed();
+            setStatus('error');
+            setNotice("Not saved: VS Code isn't answering. Your text stays here and is saved as soon as the connection is back.");
+            markDisconnected();
+          }, ACK_TIMEOUT_MS);
+        }
       }
     };
     const offReconnect = onReconnect(() => {
@@ -112,6 +123,13 @@ export function InlineEditor(props: {
       setStatus('unsaved');
       clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(flush, SAVE_DELAY_MS);
+    };
+
+    /** Hub mode: images are files in the repo, which only VS Code can add. */
+    const refuseImage = (event: Event) => {
+      event.preventDefault();
+      setNotice('Images are added in VS Code: the board here holds the text only.');
+      return true;
     };
 
     const view = new EditorView({
@@ -135,7 +153,9 @@ export function InlineEditor(props: {
           promoteEntryButton,
           logMode.current.of(props.log ? [logCard.of(true), promoteEntry.of(onPromote)] : []),
           baseConfig.current.of(assetBase.of(props.assetBase)),
-          EditorState.readOnly.of(false),
+          editable.current.of(editableConfig(!!props.readOnly)),
+          // A page with a nonce-only CSP: the editor's style elements carry the nonce.
+          ...(hostOptions.cspNonce ? [EditorView.cspNonce.of(hostOptions.cspNonce)] : []),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) {
               for (const [key, pos] of pendingImages.current) pendingImages.current.set(key, u.changes.mapPos(pos, 1));
@@ -153,6 +173,7 @@ export function InlineEditor(props: {
             paste: (event, view) => {
               const cd = event.clipboardData;
               const files = imageFiles(cd?.files);
+              if (files.length > 0 && hubMode) return refuseImage(event);
               vscode.postMessage({
                 type: 'clientLog',
                 message: `paste: types=[${[...(cd?.types ?? [])].join(', ')}] files=${cd?.files.length ?? 0} items=[${[...(cd?.items ?? [])].map((i) => `${i.kind}:${i.type}`).join(', ')}] images=${files.length}`,
@@ -164,6 +185,7 @@ export function InlineEditor(props: {
             },
             drop: (event, view) => {
               const files = imageFiles(event.dataTransfer?.files);
+              if (files.length > 0 && hubMode) return refuseImage(event);
               vscode.postMessage({
                 type: 'clientLog',
                 message: `drop: types=[${[...(event.dataTransfer?.types ?? [])].join(', ')}] files=${event.dataTransfer?.files.length ?? 0} images=${files.length}`,
@@ -312,6 +334,10 @@ export function InlineEditor(props: {
     viewRef.current?.dispatch({ effects: baseConfig.current.reconfigure(assetBase.of(props.assetBase)) });
   }, [props.assetBase]);
 
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: editable.current.reconfigure(editableConfig(!!props.readOnly)) });
+  }, [props.readOnly]);
+
   const resolve = (choice: 'mine' | 'theirs') => {
     const view = viewRef.current;
     const sync = syncRef.current;
@@ -344,12 +370,14 @@ export function InlineEditor(props: {
             <button type="button" onClick={() => resolve('theirs')}>
               Take theirs
             </button>
-            <button
-              type="button"
-              onClick={() => vscode.postMessage({ type: 'showDiff', id, mine: viewRef.current?.state.doc.toString() ?? '' })}
-            >
-              Show diff
-            </button>
+            {!hubMode && (
+              <button
+                type="button"
+                onClick={() => vscode.postMessage({ type: 'showDiff', id, mine: viewRef.current?.state.doc.toString() ?? '' })}
+              >
+                Show diff
+              </button>
+            )}
           </div>
         </div>
       )}

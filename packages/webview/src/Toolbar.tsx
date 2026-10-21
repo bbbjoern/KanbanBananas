@@ -15,6 +15,8 @@ export function Toolbar(props: {
   groupBy: GroupBy;
   onGroupBy: (g: GroupBy) => void;
   shown: number;
+  /** Hub mode: without what only VS Code can do (new column or swimlane, the label commands, the settings). */
+  hub?: boolean;
 }) {
   const { filters, cards } = props;
   const search = useRef<HTMLInputElement>(null);
@@ -111,16 +113,17 @@ export function Toolbar(props: {
           <option value="lane">Swimlanes: Lane field</option>
         </select>
       )}
-      {props.layout === 'panel' && (
+      {props.layout === 'panel' && !props.hub && (
         <button type="button" className="tool add-lane" onClick={() => vscode.postMessage({ type: 'columnCommand', action: 'new' })}>
           + Column
         </button>
       )}
-      {props.layout === 'panel' && props.groupBy !== 'none' && (
+      {props.layout === 'panel' && props.groupBy !== 'none' && !props.hub && (
         <button type="button" className="tool add-lane" onClick={() => vscode.postMessage({ type: 'laneCommand', action: 'new', field: props.groupBy as GroupField })}>
           + Swimlane
         </button>
       )}
+      {!props.hub && (
       <select
         aria-label="Manage labels"
         className="tool-select"
@@ -134,6 +137,8 @@ export function Toolbar(props: {
         <option value="rename">Rename a label…</option>
         <option value="delete">Delete a label…</option>
       </select>
+      )}
+      {!props.hub && (
       <button
         type="button"
         className="tool icon settings"
@@ -143,6 +148,7 @@ export function Toolbar(props: {
       >
         ⚙
       </button>
+      )}
     </div>
   );
 }

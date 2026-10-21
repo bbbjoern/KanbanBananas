@@ -1469,3 +1469,73 @@ button {
   color: var(--muted);
   font-style: normal;
 }
+
+/* Hub mode: the state of a change asked of the machine, on its card (design 3e). */
+
+.request-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.request-pending > .card {
+  border-style: dashed;
+}
+
+.request-applied > .card {
+  animation: request-applied 600ms ease-out;
+}
+
+@keyframes request-applied {
+  from {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
+.request-stale > .card,
+.request-conflict > .card,
+.request-expired > .card {
+  border-color: var(--error);
+  box-shadow: 0 0 0 1px var(--error);
+}
+
+.request-gone > .card {
+  opacity: 0.55;
+}
+
+.request-gone > .card .title {
+  text-decoration: line-through;
+}
+
+.request-note {
+  padding: 6px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.request-stale .request-note,
+.request-conflict .request-note,
+.request-expired .request-note,
+.request-gone .request-note {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 50%, transparent);
+}
+
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.request-actions .tool {
+  border: 1px solid var(--card-border-hover);
+  color: var(--fg);
+}
