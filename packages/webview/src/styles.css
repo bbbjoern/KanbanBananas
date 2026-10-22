@@ -1157,6 +1157,30 @@ button {
   border-radius: 4px;
 }
 
+/* Hub mode: an image the host's copy doesn't have (design 4d): a dashed box with the path. */
+.cm-lp-image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 8px 10px;
+  border: 1px dashed var(--card-border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.cm-lp-image-missing svg {
+  flex: none;
+}
+
+.cm-lp-image-missing code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11.5px;
+  color: var(--fg);
+}
+
 /* First run */
 
 .welcome {
@@ -1528,6 +1552,7 @@ button {
 }
 
 .request-stale > .card,
+.request-refused > .card,
 .request-conflict > .card,
 .request-expired > .card {
   border-color: var(--error);
@@ -1553,11 +1578,40 @@ button {
 }
 
 .request-stale .request-note,
+.request-refused .request-note,
 .request-conflict .request-note,
 .request-expired .request-note,
 .request-gone .request-note {
   color: var(--error);
   border-color: color-mix(in srgb, var(--error) 50%, transparent);
+}
+
+/* The note's line: an icon (changed since: triangle; the machine said no: octagon) or the requester's avatar before the words. */
+.request-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.request-icon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+}
+
+.request-who {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  margin-top: 0.5px;
 }
 
 .request-actions {

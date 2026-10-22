@@ -1,6 +1,7 @@
 import type { CardRequest } from '@kanban-bananas/core';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { NO_HUB, noteFor, PENDING_NOTE_DELAY_MS, placeholdersIn, requestFor, type HubState } from './requestState.js';
+import { OctagonAlertIcon, TriangleAlertIcon } from './icons.js';
+import { iconFor, NO_HUB, noteFor, PENDING_NOTE_DELAY_MS, placeholdersIn, requestFor, type HubState } from './requestState.js';
 import { vscode } from './vscode.js';
 
 /**
@@ -40,9 +41,30 @@ export function RequestNote({ request }: { request: CardRequest }) {
   const note = noteFor(request, machine, now);
   const actions = request.actions ?? [];
   if (!note && actions.length === 0) return null;
+  const icon = iconFor(request.state);
+  const by = request.state === 'pending' ? request.by : undefined;
   return (
     <div className="request-note" role="status" onPointerDown={(e) => e.stopPropagation()}>
-      {note && <div>{note}</div>}
+      {note && (
+        <div className="request-line">
+          {icon === 'triangle' && (
+            <span className="request-icon">
+              <TriangleAlertIcon size={14} />
+            </span>
+          )}
+          {icon === 'octagon' && (
+            <span className="request-icon">
+              <OctagonAlertIcon size={14} />
+            </span>
+          )}
+          {by && (
+            <span className="request-who" style={{ background: by.color }} aria-hidden>
+              {by.initials}
+            </span>
+          )}
+          <span>{note}</span>
+        </div>
+      )}
       {actions.length > 0 && (
         <div className="request-actions">
           {actions.map((a) => (

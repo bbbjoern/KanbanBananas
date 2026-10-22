@@ -94,6 +94,16 @@ export function App({ layout }: { layout: Layout }) {
     return () => clearTimeout(t);
   }, [collapsed, live, selected, filters, groupBy, wide]);
 
+  // The pane narrows the board: once it has opened (its 150 ms transition), the board scrolls so the opened card is in view.
+  useEffect(() => {
+    if (layout !== 'panel' || !selected) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-card-id="${globalThis.CSS.escape(selected)}"]`);
+      el?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    }, 180);
+    return () => clearTimeout(t);
+  }, [selected, layout]);
+
   // Full-text search runs in the host, which has the card bodies.
   const [searchIds, setSearchIds] = useState<Set<string> | null>(null);
   const query = filters.query.trim();
@@ -983,6 +993,7 @@ function CardBody(props: {
     <button
       type="button"
       className={`card ${dragging ? 'dragging' : ''} ${props.selected ? 'selected' : ''}`}
+      data-card-id={dragging ? undefined : fields.id}
       aria-pressed={props.selected}
       title={card.path}
       // Right-click menu: VS Code reads this and shows the kanbanBananas.card.* commands.

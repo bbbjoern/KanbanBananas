@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BodySync } from '../bodySync.js';
 import { ACK_TIMEOUT_MS, markDisconnected, onReconnect, request } from '../connection.js';
 import { hostOptions, hubMode, onHostMessage, vscode } from '../vscode.js';
-import { assetBase, livePreview } from './livePreview.js';
+import { assetBase, livePreview, missingImageBox } from './livePreview.js';
 import { cardFromEntry, entryBlocksView, entryEnter, entryMenu, imagePlacement, logCard, promoteEntry, promoteEntryButton } from './entries.js';
 import { imageFiles, prepareImage } from './pasteImage.js';
 import { taskInput } from './taskInput.js';
@@ -128,7 +128,7 @@ export function InlineEditor(props: {
     /** Hub mode without a host that takes pastes: images are files in the repo, which only VS Code can add. */
     const refuseImage = (event: Event) => {
       event.preventDefault();
-      setNotice('Images are added in VS Code: the board here holds the text only.');
+      setNotice(hostOptions.pasteNote ?? 'Images are added in VS Code: the board here holds the text only.');
       return true;
     };
 
@@ -153,6 +153,7 @@ export function InlineEditor(props: {
           promoteEntryButton,
           logMode.current.of(props.log ? [logCard.of(true), promoteEntry.of(onPromote)] : []),
           baseConfig.current.of(assetBase.of(props.assetBase)),
+          missingImageBox.of(hubMode),
           editable.current.of(editableConfig(!!props.readOnly)),
           // A page with a nonce-only CSP: the editor's style elements carry the nonce.
           ...(hostOptions.cspNonce ? [EditorView.cspNonce.of(hostOptions.cspNonce)] : []),

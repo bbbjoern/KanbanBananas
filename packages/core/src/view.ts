@@ -212,14 +212,28 @@ export interface CardRequest {
   actions?: CardRequestAction[];
   /** Title and column for a request whose card isn't on the board. */
   placeholder?: { title: string; status: string };
+  /**
+   * Who asked, when it is not the viewer (SuperTask Board 4c, D-133): a
+   * pending request then reads "‹name›'s change · waiting for ‹machine›" with
+   * their avatar. `color` is any CSS colour. Absent for the viewer's own.
+   */
+  by?: CardRequestBy;
+}
+
+export interface CardRequestBy {
+  name: string;
+  initials: string;
+  color: string;
 }
 
 /**
  * pending: sent, no answer yet · applied: done (the host shows it briefly, then drops it) ·
  * stale: refused, a field it depends on changed meanwhile · conflict: a body save overlapped
- * someone else's change · gone: the card was deleted or renamed · expired: dropped unanswered.
+ * someone else's change · gone: the card was deleted or renamed · expired: dropped unanswered ·
+ * refused: the machine could not apply it for a reason of its own (the note says why; drawn
+ * like stale with its own icon, SuperTask Board 4c, D-132).
  */
-export type CardRequestState = 'pending' | 'applied' | 'stale' | 'conflict' | 'gone' | 'expired';
+export type CardRequestState = 'pending' | 'applied' | 'stale' | 'conflict' | 'gone' | 'expired' | 'refused';
 
 export interface CardRequestAction {
   id: string;
@@ -262,6 +276,12 @@ export interface BoardHostOptions {
    * and says images are added in VS Code.
    */
   images?: boolean;
+  /**
+   * Hub mode: what the editor says when it refuses a paste because `images` is
+   * off, in place of "Images are added in VS Code: the board here holds the
+   * text only." (a repo that shares titles and fields only has its own line).
+   */
+  pasteNote?: string;
 }
 
 const EXCERPT_LENGTH = 160;

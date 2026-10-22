@@ -36,6 +36,15 @@ export function placeholdersIn(requests: CardRequest[], status: string, onBoard:
 /** The note under a card right now: the host's, or "Waiting for ‹machine›…" once a pending request is a second old. */
 export function noteFor(r: CardRequest, machine: string | null, now: number): string | null {
   if (r.note) return r.note;
-  if (r.state === 'pending' && now - r.since >= PENDING_NOTE_DELAY_MS) return `Waiting for ${machine ?? 'the machine'}…`;
+  if (r.state === 'pending' && now - r.since >= PENDING_NOTE_DELAY_MS) {
+    const who = machine ?? 'the machine';
+    // Someone else's change (design 4c): the line names them; the avatar is drawn beside it.
+    return r.by ? `${r.by.name}’s change · waiting for ${who}` : `Waiting for ${who}…`;
+  }
   return null;
+}
+
+/** The icon before a refused request's note: the card changed meanwhile (triangle), or the machine said no (octagon). */
+export function iconFor(state: CardRequest['state']): 'triangle' | 'octagon' | null {
+  return state === 'stale' ? 'triangle' : state === 'refused' ? 'octagon' : null;
 }
