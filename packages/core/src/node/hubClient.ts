@@ -33,7 +33,14 @@ import { cardTexts } from './cardHash.js';
  * - Connect = reconcile (hello with every card's hash, send what the hub
  *   lacks) + an event stream for intents. Any failure means offline and a
  *   retry with backoff; a refusal (token, protocol, repo) waits longer and
- *   shows its message.
+ *   shows its message. A stream that ends soon after it opened counts as a
+ *   failure too, so a hub that keeps closing it is not asked every second.
+ * - One stream per repo on the hub: when another client (a second window, a
+ *   leftover extension host, another machine) connects, the hub sends this
+ *   one `replaced`. It then waits, without a hello or a retry, until the
+ *   host calls `resume()` (the window got focus, the user asked): two
+ *   clients that reconnected on their own would replace each other forever,
+ *   and one of them may hold an older copy of the board.
  * - Changes go up as they happen (`notifyChanged`, diffed by hash against
  *   what the hub holds), with a periodic reconcile as the safety net. There
  *   is no durable queue: a missed event is repaired by the next reconcile.
@@ -77,6 +84,8 @@ export interface HubTiming {
   debounceMs: number;
   /** A stream without any bytes for this long is reconnected. */
   streamIdleMs: number;
+  /** A stream that ends sooner than this after it opened backs the retry off like a failure. */
+  quickDropMs: number;
   /** For hello and events. */
   requestTimeoutMs: number;
   /** For one image upload. */
@@ -90,11 +99,12 @@ export const DEFAULT_HUB_TIMING: HubTiming = {
   reconcileMs: 15 * 60_000,
   debounceMs: 300,
   streamIdleMs: 90_000,
+  quickDropMs: 10_000,
   requestTimeoutMs: 20_000,
   uploadTimeoutMs: 60_000,
 };
 
-export type HubState = 'off' | 'connecting' | 'connected' | 'offline' | 'refused';
+export type HubState = 'off' | 'connecting' | 'connected' | 'offline' | 'refused' | 'replaced';
 
 export interface HubStatus {
   state: HubState;
@@ -159,6 +169,7 @@ export class HubRequestError extends Error {
 const ANSWER_TTL_MS = 5 * 60_000;
 /** Card texts go up in requests of about this many bytes, so a big board fits a hub's body limit. */
 export const HUB_BATCH_BYTES = 512 * 1024;
+const REPLACED = 'Another window or machine syncs this board with the hub now.';
 const READ_ONLY = 'This client is read-only; open the project in VS Code to apply changes.';
 const FIELDS_ONLY_UNSUPPORTED = 'This hub takes whole card texts only. Update the hub, or share the text (the setting "Share text", kanbanBananas.hub.shareText).';
 
@@ -183,6 +194,8 @@ export class HubClient {
   private chain: Promise<unknown> = Promise.resolve();
   private streamAbort: AbortController | undefined;
   private streamFailure: unknown;
+  /** The hub said another client took over; the loop waits for `resume()`. */
+  private replaced = false;
   private wake: (() => void) | undefined;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -205,8 +218,14 @@ export class HubClient {
     this.loop = this.run();
   }
 
+  /** After `replaced`: connect again now, taking the hub back from the other client. Otherwise nothing. */
+  resume(): void {
+    if (this.replaced) this.wake?.();
+  }
+
   async stop(): Promise<void> {
     this.running = false;
+    this.replaced = false;
     clearTimeout(this.debounceTimer);
     this.streamAbort?.abort();
     this.wake?.();
@@ -240,18 +259,28 @@ export class HubClient {
 
   private async run(): Promise<void> {
     let failures = 0;
+    let quickDrops = 0;
     while (this.running) {
       try {
         this.setStatus('connecting', null);
         await this.enqueue(() => this.reconcile());
         failures = 0;
         this.setStatus('connected', null);
+        const opened = Date.now();
         await this.stream();
         this.session = null;
         if (!this.running) break;
         const why = this.takeStreamFailure();
+        if (this.replaced) {
+          quickDrops = 0;
+          this.setStatus('replaced', REPLACED);
+          await this.wait(null);
+          this.replaced = false;
+          continue;
+        }
+        quickDrops = Date.now() - opened < this.t.quickDropMs ? quickDrops + 1 : 0;
         this.setStatus('offline', why ? describe(why) : 'The connection to the hub dropped; reconnecting.');
-        await this.wait(this.t.retryMinMs);
+        await this.wait(quickDrops ? this.backoff(quickDrops) : this.t.retryMinMs);
       } catch (e) {
         this.session = null;
         if (!this.running) break;
@@ -260,9 +289,8 @@ export class HubClient {
           await this.wait(this.t.refusedRetryMs);
         } else {
           failures++;
-          const delay = Math.min(this.t.retryMinMs * 2 ** (failures - 1), this.t.retryMaxMs);
           this.setStatus('offline', describe(e));
-          await this.wait(delay);
+          await this.wait(this.backoff(failures));
         }
       }
     }
@@ -470,6 +498,11 @@ export class HubClient {
         return;
       case 'refused':
         throw new HubRefusedError(message);
+      case 'replaced':
+        // Ends the stream; the loop waits for resume().
+        this.replaced = true;
+        this.breakStream(null);
+        return;
       case 'welcome':
         return;
     }
@@ -626,9 +659,15 @@ export class HubClient {
     return run;
   }
 
-  private wait(ms: number): Promise<void> {
+  /** The n-th retry's delay: doubles from the minimum up to the maximum. */
+  private backoff(n: number): number {
+    return Math.min(this.t.retryMinMs * 2 ** (n - 1), this.t.retryMaxMs);
+  }
+
+  /** Until the delay passes or `wake` (stop, resume) is called; `null` waits for `wake` only. */
+  private wait(ms: number | null): Promise<void> {
     return new Promise((resolve) => {
-      const timer = setTimeout(done, ms);
+      const timer = ms === null ? undefined : setTimeout(done, ms);
       this.wake = done;
       function done() {
         clearTimeout(timer);

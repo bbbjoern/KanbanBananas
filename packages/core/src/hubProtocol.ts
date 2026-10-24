@@ -31,7 +31,10 @@ import type { ColumnConfig } from './view.js';
  *   (4xx with the JSON; a 401/403 without one is a bad token).
  * - `POST events` with `{ messages: ClientMessage[] }`; acks travel here too.
  * - `GET stream` is a server-sent event stream of `HubMessage`s, one JSON
- *   object per `data:` line; comment lines keep the connection alive.
+ *   object per `data:` line; comment lines keep the connection alive. The
+ *   hub keeps one stream per repo: a newer one takes over, and the older is
+ *   sent `replaced` before it ends (a client older than the message ignores
+ *   it and reconnects).
  * - `PUT assets/<path>` (the path's segments URL-encoded) with the image's
  *   bytes as the body and its media type as `Content-Type` stores one image
  *   the cards refer to (`HelloMessage.assets`); it answers 200 with
@@ -190,7 +193,13 @@ export type HubMessage =
   | RefusedMessage
   | { type: 'intent'; intent: HubIntent }
   /** Send `hello` again: the hub lost its state, or it is time for the periodic reconcile. */
-  | { type: 'reconcile' };
+  | { type: 'reconcile' }
+  /**
+   * A newer stream for the same repo took over (another window or machine);
+   * this one ends now. Don't reconnect on your own: the other client would be
+   * replaced in turn, and the two would take turns forever.
+   */
+  | { type: 'replaced' };
 
 /**
  * Field values an intent was planned against, by field. The client applies the

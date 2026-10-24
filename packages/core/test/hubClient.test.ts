@@ -49,6 +49,8 @@ class FakeHub {
   pasted = new Map<string, Buffer>();
   /** Every request's method and path, in order. */
   requests: string[] = [];
+  /** End every stream cleanly as soon as it opens, as a hub that keeps closing it would. */
+  endStreams = false;
 
   constructor() {
     this.server = createServer((req, res) => void this.handle(req, res));
@@ -73,6 +75,13 @@ class FakeHub {
 
   send(message: HubMessage): void {
     for (const res of this.streams) res.write(`data: ${JSON.stringify(message)}\n\n`);
+  }
+
+  /** What the hub does when another client's stream takes over: say so, then end the stream. */
+  replaceStreams(): void {
+    this.send({ type: 'replaced' });
+    for (const res of this.streams) res.end();
+    this.streams.clear();
   }
 
   dropStreams(): void {
@@ -149,6 +158,7 @@ class FakeHub {
       this.streams.add(res);
       this.streamsOpened++;
       res.on('close', () => this.streams.delete(res));
+      if (this.endStreams) setImmediate(() => res.end());
     } else {
       res.writeHead(404).end();
     }
@@ -257,6 +267,70 @@ describe('HubClient', () => {
     expect(mirrorDigests(h.mirror)).toEqual(cardDigests(files));
     expect(client.status().state).toBe('connected');
     expect(h.sessions).toEqual(['s1', 's2']);
+  });
+
+  it('waits when the hub says another client took over, and connects again only on resume', async () => {
+    const h = await hub();
+    let files = [file('a', '1')];
+    const { client, statuses } = makeClient(h, () => files);
+    open.push(client);
+    client.resume(); // not replaced: nothing
+    client.start();
+    await waitFor(() => h.streams.size === 1, 'first stream');
+    h.replaceStreams();
+    await waitFor(() => client.status().state === 'replaced', 'replaced');
+    expect(client.status().message).toMatch(/Another window or machine/);
+    files = [file('a', '1 stale copy')];
+    client.notifyChanged();
+    // Many retry intervals later: no hello, no stream, nothing sent.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(h.hellos).toHaveLength(1);
+    expect(h.streamsOpened).toBe(1);
+    expect(h.received).toHaveLength(1);
+    expect(statuses.map((s) => s.state)).toEqual(['connecting', 'connected', 'replaced']);
+
+    client.resume();
+    await waitFor(() => client.status().state === 'connected' && h.streams.size === 1, 'connected again');
+    expect(h.hellos).toHaveLength(2);
+    expect(mirrorDigests(h.mirror)).toEqual(cardDigests(files));
+  });
+
+  it('stops while replaced, and starts afresh', async () => {
+    const h = await hub();
+    const { client } = makeClient(h, () => [file('a', '1')]);
+    open.push(client);
+    client.start();
+    await waitFor(() => h.streams.size === 1, 'first stream');
+    h.replaceStreams();
+    await waitFor(() => client.status().state === 'replaced', 'replaced');
+    await client.stop();
+    expect(client.status().state).toBe('off');
+    client.start();
+    await waitFor(() => client.status().state === 'connected' && h.streams.size === 1, 'connected after a new start');
+    expect(h.hellos).toHaveLength(2);
+  });
+
+  it('backs off when the hub keeps ending the stream right after it opened', async () => {
+    const h = await hub();
+    h.endStreams = true;
+    const { client } = makeClient(h, () => [file('a', '1')], { timing: { ...TIMING, retryMinMs: 40, retryMaxMs: 10_000 } });
+    open.push(client);
+    client.start();
+    // Retries after 40, 80, 160, 320 ms: about five hellos in 600 ms, not fifteen.
+    await new Promise((r) => setTimeout(r, 600));
+    expect(h.hellos.length).toBeGreaterThanOrEqual(3);
+    expect(h.hellos.length).toBeLessThanOrEqual(6);
+    expect(client.status().state).not.toBe('replaced');
+  });
+
+  it('retries at the minimum after a stream that lived', async () => {
+    const h = await hub();
+    h.endStreams = true;
+    const { client } = makeClient(h, () => [file('a', '1')], { timing: { ...TIMING, retryMinMs: 40, retryMaxMs: 10_000, quickDropMs: 0 } });
+    open.push(client);
+    client.start();
+    await new Promise((r) => setTimeout(r, 600));
+    expect(h.hellos.length).toBeGreaterThanOrEqual(8);
   });
 
   it('is offline with retries while the hub is unreachable, and refused with the message when the hub says so', async () => {

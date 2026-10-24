@@ -20,6 +20,8 @@ export class HubHost implements vscode.Disposable {
   private readonly subs: vscode.Disposable[] = [];
   private status: HubStatus | undefined;
   private restarting: Promise<void> = Promise.resolve();
+  /** Set by dispose(), so a restart still in flight starts no client nobody stops. */
+  private disposed = false;
 
   constructor(
     private readonly controller: BoardController,
@@ -32,6 +34,10 @@ export class HubHost implements vscode.Disposable {
     this.subs.push(
       controller.onDidStart(() => this.restart()),
       controller.onDidChange(() => this.client?.notifyChanged()),
+      // Another client took the hub over: the window in use takes it back; a host without a window never does.
+      vscode.window.onDidChangeWindowState((w) => {
+        if (w.focused) this.client?.resume();
+      }),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration(`${SECTION}.hub`) || e.affectsConfiguration(`${SECTION}.images`)) this.restart();
         else if (e.affectsConfiguration(`${SECTION}.columns`)) this.client?.notifyColumns();
@@ -62,6 +68,7 @@ export class HubHost implements vscode.Disposable {
       await this.client.stop();
       this.client = undefined;
     }
+    if (this.disposed) return;
     const url = this.url();
     if (!url) {
       this.item.hide();
@@ -73,6 +80,7 @@ export class HubHost implements vscode.Disposable {
       return;
     }
     const token = await this.secrets.get(tokenKey(url));
+    if (this.disposed) return;
     if (!token) {
       this.showText('$(cloud) Hub: no token', `No token for ${url}. Run "KanbanBananas: Project Hub: Set Token…".`);
       return;
@@ -162,10 +170,11 @@ export class HubHost implements vscode.Disposable {
 
   private renderStatus(s: HubStatus): void {
     this.status = s;
-    const icon = { off: '$(cloud)', connecting: '$(sync~spin)', connected: '$(cloud)', offline: '$(cloud-offline)', refused: '$(warning)' }[s.state];
-    const text = { off: 'Hub', connecting: 'Hub…', connected: 'Hub', offline: 'Hub: offline', refused: 'Hub: refused' }[s.state];
+    const icon = { off: '$(cloud)', connecting: '$(sync~spin)', connected: '$(cloud)', offline: '$(cloud-offline)', refused: '$(warning)', replaced: '$(cloud-offline)' }[s.state];
+    const text = { off: 'Hub', connecting: 'Hub…', connected: 'Hub', offline: 'Hub: offline', refused: 'Hub: refused', replaced: 'Hub: other window' }[s.state];
     const when = s.lastSyncAt ? `Last sync ${new Date(s.lastSyncAt).toLocaleTimeString()}, ${s.cards} card(s)${s.assets ? `, ${s.assets} image(s)` : ''}.` : 'Not synced yet.';
-    this.showText(`${icon} ${text}`, `${this.url()}\n${s.state}${s.message ? `: ${s.message}` : ''}\n${when}`);
+    const takeBack = s.state === 'replaced' ? '\nFocus this window, or pick Reconnect, to sync from here again.' : '';
+    this.showText(`${icon} ${text}`, `${this.url()}\n${s.state}${s.message ? `: ${s.message}` : ''}${takeBack}\n${when}`);
   }
 
   private showText(text: string, tooltip: string): void {
@@ -257,6 +266,7 @@ export class HubHost implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const s of this.subs) s.dispose();
     this.item.dispose();
     void this.client?.stop();
