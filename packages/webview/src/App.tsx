@@ -27,7 +27,7 @@ import { formatDue } from './dates.js';
 import { EyeOffIcon } from './icons.js';
 import { distinct, filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
-import { hubMode, onHostMessage, vscode } from './vscode.js';
+import { hubMode, onHostMessage, paneCard, vscode } from './vscode.js';
 
 export type Layout = 'panel' | 'sidebar';
 
@@ -81,13 +81,15 @@ export function App({ layout }: { layout: Layout }) {
   const saved = (vscode.getState() ?? (window as { __KANBAN_UI_STATE__?: unknown }).__KANBAN_UI_STATE__ ?? undefined) as UiState | undefined;
   const [collapsed, setCollapsed] = useState<string[]>(saved?.collapsed ?? []);
   const [live, setLive] = useState(saved?.live ?? true);
-  const [selected, setSelected] = useState<string | null>(saved?.selected ?? null);
+  const [selected, setSelected] = useState<string | null>(paneCard ?? saved?.selected ?? null);
   const [filters, setFilters] = useState<Filters>({ ...NO_FILTERS, ...saved?.filters });
   const [groupBy, setGroupBy] = useState<GroupBy>(saved?.groupBy ?? (saved?.lanes ? 'epic' : 'none'));
   const [wide, setWide] = useState(saved?.wide ?? false);
   const grouping: GroupField | null = layout === 'panel' && groupBy !== 'none' ? groupBy : null;
   const lanes = grouping !== null;
   useEffect(() => {
+    // Pane-only mode shows one card for a host's inspector: the board's own view state stays as the board left it.
+    if (paneCard) return;
     const state = { collapsed, live, selected, filters, groupBy, wide } satisfies UiState;
     vscode.setState(state);
     const t = setTimeout(() => vscode.postMessage({ type: 'uiState', state }), 300);
@@ -157,7 +159,7 @@ export function App({ layout }: { layout: Layout }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'n' && e.key !== 'N') return;
-      if (e.metaKey || e.ctrlKey || e.altKey || readOnly || isTyping(e.target)) return;
+      if (paneCard || e.metaKey || e.ctrlKey || e.altKey || readOnly || isTyping(e.target)) return;
       const status = settings?.defaultStatus || settings?.columns[0]?.id;
       if (status) {
         e.preventDefault();
@@ -269,6 +271,32 @@ export function App({ layout }: { layout: Layout }) {
   if (noBoard) return <Welcome {...noBoard} layout={layout} />;
   if (error) return <div className="message error">{error}</div>;
   if (!board || !settings) return <div className="message">Loading board…</div>;
+
+  // Pane-only mode (a host's inspector): the card's pane at the page's full width, nothing else.
+  if (paneCard) {
+    const card = selected ? cardsById.get(selected) : undefined;
+    const close = () => vscode.postMessage({ type: 'paneClosed' });
+    return (
+      <HubProvider value={hubValue}>
+        <div className="workspace pane-only">
+          {card ? (
+            <DetailPane
+              card={card}
+              settings={settings}
+              live={live}
+              onToggleLive={() => setLive(!live)}
+              wide={false}
+              assetBase={assetBase}
+              knownLabels={distinct(board.cards, (c) => c.fields.labels)}
+              onClose={close}
+            />
+          ) : (
+            <div className="message">This card is no longer on the board.</div>
+          )}
+        </div>
+      </HubProvider>
+    );
+  }
 
   const active = activeId ? cardsById.get(activeId) : undefined;
   const selectedCard = layout === 'panel' && selected ? cardsById.get(selected) : undefined;

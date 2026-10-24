@@ -92,6 +92,9 @@ export const hostOptions: BoardHostOptions = transport.options;
 /** Hub mode: the board shows a host's copy of the cards, changed only through requests (BoardHostOptions in core). */
 export const hubMode = hostOptions.mode === 'hub';
 
+/** Pane-only mode (BoardHostOptions.pane, hub mode only): the card whose pane is the whole page, else null. */
+export const paneCard: string | null = hubMode && typeof hostOptions.pane === 'string' && hostOptions.pane !== '' ? hostOptions.pane : null;
+
 export function onHostMessage(handler: (m: HostMessage) => void): () => void {
   return transport.onMessage(handler);
 }

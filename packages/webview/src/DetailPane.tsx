@@ -23,7 +23,8 @@ export function DetailPane(props: {
   onToggleLive: () => void;
   /** Wider editor (more room for text, less for the board). */
   wide: boolean;
-  onToggleWide: () => void;
+  /** Absent in pane-only mode: the pane is the whole page, so there is nothing to widen. */
+  onToggleWide?: () => void;
   onClose: () => void;
   assetBase: string;
   /** Every label on the board, to suggest while typing. */
@@ -61,16 +62,18 @@ export function DetailPane(props: {
               Open file
             </button>
           )}
-          <button
-            type="button"
-            className="tool icon"
-            onClick={props.onToggleWide}
-            aria-pressed={props.wide}
-            aria-label={props.wide ? 'Narrower editor' : 'Wider editor'}
-            title={props.wide ? 'Narrower editor' : 'Wider editor'}
-          >
-            {props.wide ? '⇥' : '⇤'}
-          </button>
+          {props.onToggleWide && (
+            <button
+              type="button"
+              className="tool icon"
+              onClick={props.onToggleWide}
+              aria-pressed={props.wide}
+              aria-label={props.wide ? 'Narrower editor' : 'Wider editor'}
+              title={props.wide ? 'Narrower editor' : 'Wider editor'}
+            >
+              {props.wide ? '⇥' : '⇤'}
+            </button>
+          )}
           <button type="button" className="tool icon" onClick={props.onClose} aria-label="Close (Esc)" title="Close (Esc)">
             ×
           </button>

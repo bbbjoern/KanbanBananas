@@ -1,4 +1,4 @@
-import type { BoardHost, HostMessage } from '@kanban-bananas/core';
+import type { BoardHost, BoardHostOptions, HostMessage } from '@kanban-bananas/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -55,5 +55,28 @@ describe('transport', () => {
     t.onHostMessage((m) => got.push(m));
     win.dispatchEvent(Object.assign(new Event('message'), { data: { type: 'error', message: 'dev' } }));
     expect(got).toEqual([{ type: 'error', message: 'dev' }]);
+  });
+
+  const pageHost = (options: BoardHostOptions): BoardHost => ({
+    postMessage: () => undefined,
+    onMessage: () => () => undefined,
+    options,
+  });
+
+  it("shows one card's pane when a hub host names it (pane-only mode, a host's inspector)", async () => {
+    g.kanbanBananasHost = pageHost({ mode: 'hub', pane: 'card-7' });
+    const t = await import('./vscode.js');
+    expect(t.paneCard).toBe('card-7');
+  });
+
+  it('ignores the pane outside hub mode, and an empty one', async () => {
+    g.kanbanBananasHost = pageHost({ pane: 'card-7' });
+    expect((await import('./vscode.js')).paneCard).toBeNull();
+    vi.resetModules();
+    g.kanbanBananasHost = pageHost({ mode: 'hub', pane: '' });
+    expect((await import('./vscode.js')).paneCard).toBeNull();
+    vi.resetModules();
+    g.kanbanBananasHost = pageHost({ mode: 'hub' });
+    expect((await import('./vscode.js')).paneCard).toBeNull();
   });
 });

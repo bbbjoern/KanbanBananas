@@ -188,6 +188,8 @@ export type WebviewMessage = { requestId?: string } & (
   | { type: 'ping' }
   /** Hub mode: a button under a request was pressed (`action` is one of the request's `actions`). */
   | { type: 'requestAction'; request: string; action: string }
+  /** Pane-only mode (`BoardHostOptions.pane`): the pane was closed; the host closes its inspector. */
+  | { type: 'paneClosed' }
 );
 
 /**
@@ -282,6 +284,14 @@ export interface BoardHostOptions {
    * text only." (a repo that shares titles and fields only has its own line).
    */
   pasteNote?: string;
+  /**
+   * Hub mode: show only the detail pane of this card (its fields and editor),
+   * at the page's full width, for a host's inspector beside a list of the
+   * cards. The board, toolbar and columns are not drawn, and the page's view
+   * state is left alone. `selectCard` switches the card; the pane's close
+   * button (and Escape) sends `paneClosed` for the host to close its inspector.
+   */
+  pane?: string;
 }
 
 const EXCERPT_LENGTH = 160;
