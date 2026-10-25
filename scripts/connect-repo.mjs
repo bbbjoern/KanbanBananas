@@ -15,7 +15,7 @@
 // --remove stops and deletes the agent; the board and the token file stay.
 // Needs `kanban` on the PATH: `npm run install-cli` first.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -67,7 +67,14 @@ const kanban = spawnSync('which', ['kanban'], { encoding: 'utf8' }).stdout.trim(
 if (!kanban) fail('`kanban` is not on your PATH. Run `npm run install-cli` first.');
 
 // 1. The board.
-if (!existsSync(join(repo, '.git'))) console.log(`\n  Note: ${repo} has no .git; the hub will know it by its path, not its git remote.`);
+if (!existsSync(join(repo, '.git'))) {
+  // Xcode often puts the repository one level down (Mirazo/Mirazo/.git): say so before a board lands in the wrong folder.
+  const inside = readdirSync(repo, { withFileTypes: true }).filter((e) => e.isDirectory() && existsSync(join(repo, e.name, '.git')));
+  if (inside.length > 0 && !existsSync(join(repo, '.devtool'))) {
+    fail(`${repo} is not a git repository, but ${inside.map((e) => `"${join(repo, e.name)}"`).join(' and ')} is. Pass that folder instead.`);
+  }
+  console.log(`\n  Note: ${repo} has no .git; the hub will know it by its path, not its git remote.`);
+}
 const features = join(repo, '.devtool/features');
 if (existsSync(join(repo, '.devtool'))) {
   step(`Board: using the existing .devtool in ${repo}`);

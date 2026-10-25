@@ -73,7 +73,7 @@ While VS Code is running, CLI changes go through the extension (including into o
 
 ### Without VS Code (e.g. an Xcode project)
 
-A repository you don't open in VS Code can still have a board in a hub. Two commands, run in this repository:
+A repository you don't open in VS Code can still have a board in a hub. Two commands, run in this repository (step by step, with troubleshooting: [docs/hub-without-vscode.md](docs/hub-without-vscode.md)):
 
 ```sh
 npm run install-cli                                        # puts `kanban` on your PATH; run it again after pulling
