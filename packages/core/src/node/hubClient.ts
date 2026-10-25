@@ -477,6 +477,8 @@ export class HubClient {
           continue;
         }
         await this.handle(message);
+        // Aborted by a handler (`replaced`): leave now. Node 22's fetch never settles the next read of a body aborted after it ended.
+        if (abort.signal.aborted) break;
       }
     } catch (e) {
       if (!abort.signal.aborted) throw e;
