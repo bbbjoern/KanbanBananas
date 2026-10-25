@@ -15,9 +15,9 @@
 // --remove stops and deletes the agent; the board and the token file stay.
 // Needs `kanban` on the PATH: `npm run install-cli` first.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const USAGE = 'Usage: npm run connect-repo -- <repo> --hub <url> [--token-file <file>] [--no-agent]\n       npm run connect-repo -- <repo> --remove';
@@ -53,7 +53,7 @@ const domain = `gui/${process.getuid()}`;
 
 if (flags.remove) {
   step(`Removing the agent for ${repo}`);
-  spawnSync('launchctl', ['bootout', `${domain}/${label}`], { stdio: 'ignore' });
+  stopAgent();
   if (existsSync(plistPath)) rmSync(plistPath);
   console.log(`  Stopped ${label} and deleted ${plistPath}.\n  The board (.devtool) and the token file are untouched.`);
   process.exit(0);
@@ -63,7 +63,19 @@ const hub = (flags.hub ?? process.env.KANBAN_HUB_URL ?? '').trim();
 if (!hub) fail(`--hub <url> is missing: the hub URL SuperTask gave you.\n${USAGE}`);
 if (!/^https?:\/\//.test(hub)) fail(`the hub URL should start with https:// (or http://): ${hub}`);
 
-const kanban = spawnSync('which', ['kanban'], { encoding: 'utf8' }).stdout.trim();
+// The installed command, not this repository's own node_modules/.bin/kanban, which `npm run` puts first on the PATH.
+const kanban = (process.env.PATH ?? '')
+  .split(delimiter)
+  .filter((dir) => dir && !dir.split(sep).includes('node_modules'))
+  .map((dir) => join(dir, 'kanban'))
+  .find((path) => {
+    try {
+      accessSync(path, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 if (!kanban) fail('`kanban` is not on your PATH. Run `npm run install-cli` first.');
 
 // 1. The board.
@@ -129,8 +141,14 @@ mkdirSync(dirname(logPath), { recursive: true });
 writeFileSync(plistPath, plist());
 const lint = spawnSync('plutil', ['-lint', plistPath], { encoding: 'utf8' });
 if (lint.status !== 0) fail(`the agent file is not valid: ${lint.stdout}${lint.stderr}`);
-spawnSync('launchctl', ['bootout', `${domain}/${label}`], { stdio: 'ignore' }); // an older version of it, if loaded
-const boot = spawnSync('launchctl', ['bootstrap', domain, plistPath], { encoding: 'utf8' });
+stopAgent(); // an older version of it, if loaded
+// launchd may refuse a bootstrap while the old agent is still shutting down: try again for a few seconds.
+let boot;
+for (let attempt = 1; attempt <= 5; attempt++) {
+  boot = spawnSync('launchctl', ['bootstrap', domain, plistPath], { encoding: 'utf8' });
+  if (boot.status === 0) break;
+  sleep(1000);
+}
 if (boot.status !== 0) fail(`launchctl could not start it: ${(boot.stderr || boot.stdout).trim()}`);
 let state = '';
 try {
@@ -142,6 +160,19 @@ console.log(`  Restart: launchctl kickstart -k ${domain}/${label}`);
 console.log(`  Remove:  npm run connect-repo -- "${repo}" --remove`);
 console.log('\nDone. While VS Code has this repo open, the extension syncs and the agent waits; when VS Code closes, the agent takes over.');
 console.log('After `npm run install-cli` (a newer kanban), restart the agent with the kickstart line above.');
+
+/** Stop the agent if it is loaded, and wait (up to 10 s) until launchd has let go of it. */
+function stopAgent() {
+  spawnSync('launchctl', ['bootout', `${domain}/${label}`], { stdio: 'ignore' });
+  for (let waited = 0; waited < 10_000; waited += 250) {
+    if (spawnSync('launchctl', ['print', `${domain}/${label}`], { stdio: 'ignore' }).status !== 0) return;
+    sleep(250);
+  }
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 function plist() {
   const x = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

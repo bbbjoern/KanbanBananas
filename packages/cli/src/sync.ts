@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, watch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
-import { DEFAULT_IMAGES_FOLDER, type SocketRecord } from '@kanban-bananas/core';
+import { DEFAULT_COLUMNS, DEFAULT_IMAGES_FOLDER, type ColumnConfig, type SocketRecord } from '@kanban-bananas/core';
 import { fsAssetSource, HubClient, readBoardDir, repoIdentityFor, type HubStatus } from '@kanban-bananas/core/node';
 import { diskApply } from './hubApply.js';
 import { UsageError, type Project } from './project.js';
@@ -75,7 +75,7 @@ export async function runSync(project: Project, io: SyncIo, opts: SyncOptions): 
   if (!token) throw new UsageError('kanban sync needs a token: KANBAN_HUB_TOKEN, or KANBAN_HUB_TOKEN_FILE naming a file that holds it.');
 
   const repo = repoIdentityFor(project.features);
-  const columns = project.statuses.map((id) => ({ id, name: project.columnNames?.[id] ?? id, color: '#6b7280' }));
+  const columns = boardColumns(project);
   const say = (s: string) => io.stdout(`${s}\n`);
   const client = new HubClient({
     hub: { url, token },
@@ -140,4 +140,21 @@ export async function runSync(project: Project, io: SyncIo, opts: SyncOptions): 
 function now(env: Record<string, string | undefined>): Date {
   // Test hook, as in the other commands: a fixed clock makes written files comparable.
   return env.KANBAN_NOW ? new Date(env.KANBAN_NOW) : new Date();
+}
+
+/**
+ * The columns as the hub shows them: the names the extension provided (with the skill), else the
+ * standard columns' names and colours, else the id spelled as a name (`in-progress` → `In progress`).
+ */
+export function boardColumns(project: Pick<Project, 'statuses' | 'columnNames'>): ColumnConfig[] {
+  return project.statuses.map((id) => {
+    const standard = DEFAULT_COLUMNS.find((c) => c.id === id);
+    const name = project.columnNames?.[id] ?? standard?.name ?? humanize(id);
+    return { id, name, color: standard?.color ?? '#6b7280' };
+  });
+}
+
+function humanize(id: string): string {
+  const words = id.replace(/[-_]+/g, ' ').trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : id;
 }

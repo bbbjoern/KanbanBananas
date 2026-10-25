@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { applyToMirror, mirrorDigests, reconcile, type ClientMessage, type HelloMessage, type HubIntent, type IntentAck, type Mirror } from '@kanban-bananas/core';
 import { EXIT, run } from '../src/cli.js';
+import { boardColumns } from '../src/sync.js';
 
 const FIXTURES = join(import.meta.dirname, '../../core/test/fixtures/valid');
 
@@ -123,6 +124,8 @@ describe('kanban sync', () => {
     expect(hub.hellos[0]?.client.kind).toBe('cli');
     expect(hub.hellos[0]?.repo.featuresDir).toBe('.devtool/features');
     expect(hub.hellos[0]?.columns.map((c) => c.id)).toEqual(['backlog', 'todo', 'in-progress', 'review', 'done']);
+    expect(hub.hellos[0]?.columns.map((c) => c.name)).toEqual(['Backlog', 'To Do', 'In Progress', 'Review', 'Done']);
+    expect(hub.hellos[0]?.columns[2]?.color).toBe('#f59e0b');
     expect(mirrorDigests(hub.mirror)).toHaveLength(5);
     expect(r.out()).toMatch(/the hub holds 5 card\(s\)/);
     expect(hub.streams.size).toBe(0);
@@ -279,5 +282,15 @@ describe('kanban sync --write', () => {
     expect(ack).toMatchObject({ ok: false, code: 'error' });
     expect(!ack.ok && ack.error).toMatch(/read-only/);
     expect(read(`${LOGIN}.md`)).toBe(before);
+  });
+});
+
+describe('boardColumns', () => {
+  it('takes the names the extension gave, else the standard ones, else the id spelled as a name', () => {
+    expect(boardColumns({ statuses: ['todo', 'qa-check', 'done'], columnNames: { done: 'Shipped' } })).toEqual([
+      { id: 'todo', name: 'To Do', color: '#3b82f6' },
+      { id: 'qa-check', name: 'Qa check', color: '#6b7280' },
+      { id: 'done', name: 'Shipped', color: '#22c55e' },
+    ]);
   });
 });
