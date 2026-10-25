@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keeps a project hub (e.g. SuperTask) in sync with one repository's board while
+  VS Code is not open, and applies the hub's changes to the card files.
+
+  One agent per repository. Replace every REPLACE_… value, then:
+    cp kanban-sync.plist ~/Library/LaunchAgents/org.hypertxt.kanban-sync.REPO.plist
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.hypertxt.kanban-sync.REPO.plist
+  Stop it with `launchctl bootout gui/$(id -u)/org.hypertxt.kanban-sync.REPO`.
+
+  launchd has no shell PATH: give node and kanban as absolute paths. `npm run install-cli`
+  prints both.
+  The token stays in a file only you can read (chmod 600), never in this plist.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.hypertxt.kanban-sync.REPLACE_REPO</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPLACE_/absolute/path/to/node</string>
+    <string>REPLACE_/absolute/path/to/kanban</string>
+    <string>sync</string>
+    <string>--write</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>REPLACE_/absolute/path/to/the/repository</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>KANBAN_HUB_URL</key>
+    <string>REPLACE_https://your-hub/api/hub</string>
+    <key>KANBAN_HUB_TOKEN_FILE</key>
+    <string>REPLACE_/Users/you/.config/kanban/REPO.token</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>REPLACE_/Users/you/Library/Logs/kanban-sync-REPO.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_/Users/you/Library/Logs/kanban-sync-REPO.log</string>
+</dict>
+</plist>

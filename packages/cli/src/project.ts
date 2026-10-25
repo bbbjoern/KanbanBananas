@@ -10,6 +10,8 @@ export interface ProjectConfig {
   statuses?: string[];
   addNewCardsToTop?: boolean;
   defaultPriority?: string;
+  /** Filename pattern for new cards, e.g. `{slug}-{date}` (the default). */
+  filenamePattern?: string;
   agents?: {
     /** Statuses the CLI may move or create cards into without `--force`. */
     allowStatus?: string[];

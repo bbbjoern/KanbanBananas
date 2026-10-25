@@ -69,7 +69,11 @@ kanban memory --body - < status.md          # …or save the current state as th
 
 While VS Code is running, CLI changes go through the extension (including into open editors); otherwise the CLI writes atomically itself. Every change reports its route: `disk`, `editor-saved` or `editor-unsaved`.
 
-`kanban sync [--once] [--hub <url>]` keeps a project hub's copy of the board current from a machine where VS Code is not open (see the extension's README, "Project hub"). It is read-only and takes its token from `KANBAN_HUB_TOKEN` or `KANBAN_HUB_TOKEN_FILE`; `--once` syncs and exits, for scripts and cron. The agent skill doesn't document it: it is for people and scripts, not agents.
+`kanban sync [--once] [--write] [--hub <url>]` keeps a project hub's copy of the board current from a machine where VS Code is not open (see the extension's README, "Project hub"). It takes its token from `KANBAN_HUB_TOKEN` or `KANBAN_HUB_TOKEN_FILE`; `--once` syncs and exits, for scripts and cron. It is read-only unless you pass `--write`: then the changes made in the hub are applied to the files, with the same checks and atomic writes as the extension, until VS Code opens the project and takes over. The agent skill doesn't document it: it is for people and scripts, not agents.
+
+### Without VS Code (e.g. an Xcode project)
+
+A repository you don't open in VS Code can still have a board in a hub: put `kanban` on your PATH with `npm run install-cli` (builds the CLI and installs it as `kanban` in `/usr/local/bin` or `/opt/homebrew/bin`, whichever you can write to, else `~/.local/bin`; `-- --to <dir>` picks another place, `-- --link` symlinks the build instead of copying it; run it again after pulling) and keep `kanban sync --write` running in the repository. On a Mac, a launchd agent does that: copy [`scripts/launchd/kanban-sync.plist`](scripts/launchd/kanban-sync.plist) to `~/Library/LaunchAgents/org.hypertxt.kanban-sync.<repo>.plist`, fill in the paths, and load it with `launchctl bootstrap gui/$(id -u) <that file>`. Keep the token in a file only you can read (`chmod 600`). When you open the project in VS Code, the agent steps aside and the extension syncs; when you close it, the agent takes over again.
 
 ## Repository layout
 

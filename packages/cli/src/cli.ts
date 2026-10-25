@@ -82,11 +82,12 @@ const HELP = `kanban ${VERSION}: read and change KanbanBananas cards safely.
   kanban memory --body -|text             Save the current state of the work as the newest entry
   kanban memory --from-card <id>          Save a card's text as the newest entry (the card stays)
   kanban memory --session-start           The latest entry with a short intro, for Claude Code's SessionStart hook
-  kanban sync [--once] [--hub <url>]      Keep a project hub's copy of the board current (read-only; VS Code applies
-                                          the hub's changes). URL also from KANBAN_HUB_URL; token from KANBAN_HUB_TOKEN
-                                          or KANBAN_HUB_TOKEN_FILE. The images the cards refer to go up too. --once
-                                          syncs and exits. --fields-only sends titles and fields, never a card's text
-                                          or an image (like the extension's "Share text" off).
+  kanban sync [--once] [--write] [--hub <url>]   Keep a project hub's copy of the board current. Read-only unless
+                                          --write: then it applies the hub's changes to the files while VS Code is not
+                                          open (VS Code applies them when it is). URL also from KANBAN_HUB_URL; token
+                                          from KANBAN_HUB_TOKEN or KANBAN_HUB_TOKEN_FILE. The images the cards refer to
+                                          go up too. --once syncs and exits. --fields-only sends titles and fields, never
+                                          a card's text or an image (like the extension's "Share text" off).
 
 Options: --json (machine output), --dir <features dir>, --force (override .devtool/kanban.json policy).
 --body - reads stdin. Changes go through VS Code when it is running, else straight to the file.`;
@@ -158,6 +159,7 @@ export async function run(argv: string[], io: Io): Promise<number> {
           hub: str(args.flags.hub),
           once: args.flags.once === true,
           fieldsOnly: args.flags['fields-only'] === true,
+          write: args.flags.write === true,
           version: VERSION,
         });
         return EXIT.ok;
@@ -609,7 +611,7 @@ const COMMANDS: Record<string, { args: [min: number, max: number]; flags: string
   set: { args: [1, Infinity], flags: [] },
   edit: { args: [1, 1], flags: ['body', 'expect-mtime'] },
   memory: { args: [0, 0], flags: ['body', 'from-card', 'all', 'session-start'] },
-  sync: { args: [0, 0], flags: ['once', 'hub', 'fields-only'] },
+  sync: { args: [0, 0], flags: ['once', 'hub', 'fields-only', 'write'] },
 };
 
 function checkArgs(command: string, rest: string[], flags: Args['flags']): void {
@@ -636,7 +638,7 @@ interface Args {
   flags: Record<string, string | true>;
 }
 
-const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start', 'once', 'fields-only']);
+const BOOLEAN_FLAGS = new Set(['json', 'force', 'help', 'version', 'all', 'session-start', 'once', 'fields-only', 'write']);
 
 function parseArgs(argv: string[]): Args {
   const positional: string[] = [];
