@@ -73,7 +73,16 @@ While VS Code is running, CLI changes go through the extension (including into o
 
 ### Without VS Code (e.g. an Xcode project)
 
-A repository you don't open in VS Code can still have a board in a hub: put `kanban` on your PATH with `npm run install-cli` (builds the CLI and installs it as `kanban` in `/usr/local/bin` or `/opt/homebrew/bin`, whichever you can write to, else `~/.local/bin`; `-- --to <dir>` picks another place, `-- --link` symlinks the build instead of copying it; run it again after pulling) and keep `kanban sync --write` running in the repository. On a Mac, a launchd agent does that: copy [`scripts/launchd/kanban-sync.plist`](scripts/launchd/kanban-sync.plist) to `~/Library/LaunchAgents/org.hypertxt.kanban-sync.<repo>.plist`, fill in the paths, and load it with `launchctl bootstrap gui/$(id -u) <that file>`. Keep the token in a file only you can read (`chmod 600`). When you open the project in VS Code, the agent steps aside and the extension syncs; when you close it, the agent takes over again.
+A repository you don't open in VS Code can still have a board in a hub. Two commands, run in this repository:
+
+```sh
+npm run install-cli                                        # puts `kanban` on your PATH; run it again after pulling
+npm run connect-repo -- ~/Dev/MyApp --hub <hub url>        # asks for the hub's token
+```
+
+`connect-repo` gives the repository a board (`.devtool/features`) if it has none, checks the URL and token with one sync, keeps the token in `~/.config/kanban/<repo>.token` (readable only by you), and installs a launchd agent that runs `kanban sync --write` from login on, logging to `~/Library/Logs/kanban-sync-<repo>.log`. `--no-agent` skips the agent and prints the command to run by hand; `--remove` stops and deletes the agent. When you open the project in VS Code, the agent steps aside and the extension syncs; when you close it, the agent takes over again. To set an agent up by hand instead, [`scripts/launchd/kanban-sync.plist`](scripts/launchd/kanban-sync.plist) is a template.
+
+`install-cli` installs `kanban` in `/usr/local/bin` or `/opt/homebrew/bin`, whichever you can write to, else `~/.local/bin`; `-- --to <dir>` picks another place, `-- --link` symlinks the build instead of copying it. After a reinstall, restart the agents (`launchctl kickstart -k gui/$(id -u)/org.hypertxt.kanban-sync.<repo>`).
 
 ## Repository layout
 
