@@ -113,6 +113,7 @@ This stops and deletes the agent. The board (`.devtool`) and the token file stay
 | You see | What it means, what to do |
 |---|---|
 | `kanban is not on your PATH` | Run `npm run install-cli` first. |
+| `which repository?` | The repository's folder is missing after `connect-repo --`. Add it, or drag the folder from Finder into Terminal before pressing Return. |
 | `not a folder: …` | The path is wrong, or contains spaces without quotes. Drag the folder from Finder instead. |
 | `The hub rejected the token.` | The token is wrong, or for another repository. Get a fresh one from SuperTask and run the command again. |
 | `This token is for … not …` | The token belongs to another repository. SuperTask knows a repository by its `origin` git remote (or its folder path when it has none). |

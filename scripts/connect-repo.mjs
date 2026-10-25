@@ -42,8 +42,10 @@ for (let i = 0; i < args.length; i++) {
   else positional.push(a);
 }
 if (positional.length > 1) fail(`one repository at a time.\n${USAGE}`);
+// No default: npm runs this from the KanbanBananas folder, so a forgotten path would connect KanbanBananas itself.
+if (positional.length === 0) fail(`which repository? Pass its folder (or drag it from Finder into Terminal).\n${USAGE}`);
 
-const repo = resolve(cwd, positional[0] ?? '.');
+const repo = resolve(cwd, positional[0]);
 if (!existsSync(repo) || !statSync(repo).isDirectory()) fail(`not a folder: ${repo}`);
 const name = basename(repo).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'repo';
 const label = `org.hypertxt.kanban-sync.${name}`;
