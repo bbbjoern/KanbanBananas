@@ -1,5 +1,5 @@
 import { MEMORY_EDITOR_ID, type CardView, type ViewSettings } from '@kanban-bananas/core';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { request } from './connection.js';
 import { CopyPath } from './CopyPath.js';
 import { ErrorBoundary } from './ErrorBoundary.js';
@@ -29,6 +29,8 @@ export function DetailPane(props: {
   assetBase: string;
   /** Every label on the board, to suggest while typing. */
   knownLabels: string[];
+  /** A field to focus when the pane opens or is asked again (a host's menu: Labels…, Due date…, Assignee…, Epic…). */
+  focusField?: { field: string; n: number } | null;
 }) {
   const { card, settings } = props;
   const id = card.fields.id!;
@@ -40,9 +42,15 @@ export function DetailPane(props: {
   useEffect(() => {
     if (!noText) vscode.postMessage({ type: 'editorShown', id });
   }, [id, noText]);
+  const pane = useRef<HTMLElement>(null);
+  const focus = props.focusField;
+  useEffect(() => {
+    if (!focus) return;
+    pane.current?.querySelector<HTMLElement>(`[data-field="${focus.field}"] input, [data-field="${focus.field}"] select`)?.focus();
+  }, [focus, id]);
 
   return (
-    <aside className={`detail ${props.wide ? 'wide' : ''}`} aria-label={`Card: ${card.title ?? card.filename}`}>
+    <aside ref={pane} className={`detail ${props.wide ? 'wide' : ''}`} aria-label={`Card: ${card.title ?? card.filename}`}>
       <header className="detail-header">
         <div className="detail-title">
           <span className="title">{card.title ?? card.filename}</span>
@@ -118,12 +126,12 @@ export function DetailPane(props: {
             <option value="log">Log</option>
           </select>
         </label>
-        <label>
+        <label data-field="dueDate">
           <span>Due</span>
           <input type="date" value={card.fields.dueDate?.slice(0, 10) ?? ''} disabled={readOnly} onChange={(e) => set({ dueDate: e.target.value || null })} />
         </label>
-        <TextField label="Assignee" value={card.fields.assignee} disabled={readOnly} onCommit={(v) => set({ assignee: v || null })} />
-        <TextField label="Epic" value={card.fields.epic} disabled={readOnly} onCommit={(v) => set({ epic: v || null })} />
+        <TextField label="Assignee" field="assignee" value={card.fields.assignee} disabled={readOnly} onCommit={(v) => set({ assignee: v || null })} />
+        <TextField label="Epic" field="epic" value={card.fields.epic} disabled={readOnly} onCommit={(v) => set({ epic: v || null })} />
         {((settings.lanes?.lane.length ?? 0) > 0 || card.fields.lane) && (
           <TextField label="Lane" value={card.fields.lane} disabled={readOnly} onCommit={(v) => set({ lane: v || null })} />
         )}
@@ -220,7 +228,7 @@ export function MemoryPane(props: {
 }
 
 /** A text input that commits on Enter or blur, and reverts on Escape. */
-function TextField(props: { label: string; value: string | null; onCommit: (v: string) => void; placeholder?: string; wide?: boolean; disabled?: boolean }) {
+function TextField(props: { label: string; field?: string; value: string | null; onCommit: (v: string) => void; placeholder?: string; wide?: boolean; disabled?: boolean }) {
   const [draft, setDraft] = useState(props.value ?? '');
   useEffect(() => {
     setDraft(props.value ?? '');
@@ -229,7 +237,7 @@ function TextField(props: { label: string; value: string | null; onCommit: (v: s
     if (draft.trim() !== (props.value ?? '')) props.onCommit(draft.trim());
   };
   return (
-    <label className={props.wide ? 'wide' : undefined}>
+    <label className={props.wide ? 'wide' : undefined} data-field={props.field}>
       <span>{props.label}</span>
       <input
         value={draft}

@@ -132,7 +132,33 @@ export type HostMessage =
    * now, the machine that owns the files, and every change asked of it with
    * its state. The whole list each time; the board draws it on the cards.
    */
-  | { type: 'hubState'; readOnly: boolean; machine: string | null; requests: CardRequest[] };
+  | { type: 'hubState'; readOnly: boolean; machine: string | null; requests: CardRequest[] }
+  /** Hub mode with `menus`: an item of the host's menu that only the board can do. */
+  | { type: 'menuCommand'; command: MenuCommand };
+
+/**
+ * What a host's context menu (BoardHostOptions.menus) asks the board to do:
+ * open a card's pane, open it with one field focused (Labels…, Due date…,
+ * Assignee…, Epic…), or fold. Changes to the cards go as requests instead.
+ */
+export type MenuCommand =
+  | { action: 'openCard'; id: string }
+  | { action: 'editField'; id: string; field: 'labels' | 'dueDate' | 'assignee' | 'epic' }
+  | { action: 'foldColumn'; status: string }
+  | { action: 'foldLane'; field: GroupField; value: string | null }
+  | { action: 'foldAllLanes' }
+  | { action: 'expandAllLanes' };
+
+/**
+ * A right-click (⇧F10, the menu key, a long press) on the board, for a host
+ * that draws the menus (BoardHostOptions.menus). `x` and `y` are where to
+ * open it, in the board page's viewport; `folded` says whether the column or
+ * lane is folded now.
+ */
+export type ContextMenuTarget =
+  | { section: 'card'; cardId: string }
+  | { section: 'column'; status: string; folded: boolean }
+  | { section: 'lane'; field: GroupField; value: string | null; folded: boolean };
 
 /**
  * Messages from the board webview to the extension host: intents, never whole cards (spec §2.1).
@@ -190,6 +216,8 @@ export type WebviewMessage = { requestId?: string } & (
   | { type: 'requestAction'; request: string; action: string }
   /** Pane-only mode (`BoardHostOptions.pane`): the pane was closed; the host closes its inspector. */
   | { type: 'paneClosed' }
+  /** `BoardHostOptions.menus`: open the host's menu for this card, column or lane. */
+  | ({ type: 'contextMenu'; x: number; y: number } & ContextMenuTarget)
 );
 
 /**
@@ -292,6 +320,21 @@ export interface BoardHostOptions {
    * button (and Escape) sends `paneClosed` for the host to close its inspector.
    */
   pane?: string;
+  /**
+   * Hub mode: the host draws the board's context menus. A right-click on a
+   * card, a column's head or a lane's head (⇧F10 or the menu key on a focused
+   * one, a long press on a touch screen) sends `contextMenu` instead of the
+   * browser's menu, except with Shift held, in text fields, the editor and on
+   * links. The host answers with requests, or with `menuCommand` for what only
+   * the board can do. In VS Code the menus are VS Code's, as always.
+   */
+  menus?: boolean;
+  /**
+   * Hub mode: what the card's Copy path button puts before the card's path,
+   * e.g. `@.devtool/features/` for the extension's default form (an @mention
+   * relative to the project). Without it the button copies the path alone.
+   */
+  pathPrefix?: string;
 }
 
 const EXCERPT_LENGTH = 160;

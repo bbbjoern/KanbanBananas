@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { hubMode, vscode } from './vscode.js';
+import { hostOptions, hubMode, vscode } from './vscode.js';
 
 /**
  * Copies the card's path (as an @mention by default) to paste into an agent's
@@ -11,8 +11,9 @@ export function CopyPath({ path, label }: { path: string; label?: string }) {
   const copy = (e: React.SyntheticEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    // In VS Code the extension copies (as an @mention, per its setting); a page outside VS Code has the clipboard itself.
-    if (hubMode) void navigator.clipboard?.writeText(path).catch(() => undefined);
+    // In VS Code the extension copies (as an @mention, per its setting); a page outside VS Code has the clipboard
+    // itself, with the host's prefix (BoardHostOptions.pathPrefix, e.g. the @mention's `@.devtool/features/`).
+    if (hubMode) void navigator.clipboard?.writeText(`${hostOptions.pathPrefix ?? ''}${path}`).catch(() => undefined);
     else vscode.postMessage({ type: 'copyPath', path });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);

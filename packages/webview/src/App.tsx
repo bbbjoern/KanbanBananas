@@ -27,7 +27,8 @@ import { formatDue } from './dates.js';
 import { EyeOffIcon } from './icons.js';
 import { distinct, filtersActive, laneColor, laneValues, NO_FILTERS, NONE_LANE_NAME, passes, reorderLanes, type Filters } from './filters.js';
 import { Toolbar } from './Toolbar.js';
-import { hubMode, onHostMessage, paneCard, vscode } from './vscode.js';
+import { foldsAfter, laneKey, listenForMenus } from './menus.js';
+import { hostOptions, hubMode, onHostMessage, paneCard, vscode } from './vscode.js';
 
 export type Layout = 'panel' | 'sidebar';
 
@@ -111,6 +112,19 @@ export function App({ layout }: { layout: Layout }) {
   const query = filters.query.trim();
   /** Column being given a new card, if any. */
   const [adding, setAdding] = useState<string | null>(null);
+  /** A field of the pane to focus, asked by the host's menu (Labels…, Due date…, Assignee…, Epic…). */
+  const [focusField, setFocusField] = useState<{ field: string; n: number } | null>(null);
+  // The host's menus (hub mode): a right-click on a card or head goes to the host, which draws the menu.
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  const laneKeysRef = useRef<string[]>([]);
+  useEffect(() => {
+    if (!hubMode || !hostOptions.menus || paneCard) return;
+    return listenForMenus(
+      () => collapsedRef.current,
+      (target, x, y) => vscode.postMessage({ type: 'contextMenu', x, y, ...target }),
+    );
+  }, []);
 
   useEffect(() => {
     const off = onHostMessage((m) => {
@@ -128,6 +142,15 @@ export function App({ layout }: { layout: Layout }) {
         setBoard(null);
       } else if (m.type === 'selectCard') {
         setSelected(m.id);
+      } else if (m.type === 'menuCommand') {
+        // The host's menu (BoardHostOptions.menus): the pane, a field in it, or the folds.
+        const c = m.command;
+        if (c.action === 'openCard' || c.action === 'editField') {
+          setSelected(c.id);
+          setFocusField(c.action === 'editField' ? { field: c.field, n: Date.now() } : null);
+        } else {
+          setCollapsed((now) => foldsAfter(now, c, laneKeysRef.current));
+        }
       } else if (m.type === 'searchResults') {
         if (m.query === queryRef.current) setSearchIds(new Set(m.ids));
       } else if (m.type === 'hubState') {
@@ -185,6 +208,7 @@ export function App({ layout }: { layout: Layout }) {
     () => (grouping && settings ? laneValues(board?.cards ?? [], grouping, settings.lanes?.[grouping] ?? []) : []),
     [board, settings, grouping],
   );
+  laneKeysRef.current = grouping ? laneList.map((v) => laneKey(grouping, v)) : [];
   const hostColumns = useMemo(() => {
     const cols: Columns = {};
     for (const col of settings?.columns ?? []) {
@@ -288,6 +312,7 @@ export function App({ layout }: { layout: Layout }) {
               wide={false}
               assetBase={assetBase}
               knownLabels={distinct(board.cards, (c) => c.fields.labels)}
+              focusField={focusField}
               onClose={close}
             />
           ) : (
@@ -420,6 +445,7 @@ export function App({ layout }: { layout: Layout }) {
           onToggleWide={() => setWide(!wide)}
           assetBase={assetBase}
           knownLabels={distinct(board.cards, (c) => c.fields.labels)}
+          focusField={focusField}
           onClose={() => setSelected(null)}
         />
       )}

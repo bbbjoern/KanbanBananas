@@ -46,7 +46,7 @@ export function LabelsField(props: { labels: string[]; known: string[]; onChange
   };
 
   return (
-    <div className="labels-field wide">
+    <div className="labels-field wide" data-field="labels">
       <span id={`${listId}-label`}>Labels</span>
       <div
         className="labels-box"
