@@ -8,6 +8,7 @@ import { LabelsField } from './LabelsField.js';
 import { EyeOffIcon } from './icons.js';
 import { useHub } from './requests.js';
 import { hubMode, vscode } from './vscode.js';
+import { focusFromMenu } from './menuFocus.js';
 
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
@@ -45,8 +46,7 @@ export function DetailPane(props: {
   const pane = useRef<HTMLElement>(null);
   const focus = props.focusField;
   useEffect(() => {
-    if (!focus) return;
-    pane.current?.querySelector<HTMLElement>(`[data-field="${focus.field}"] input, [data-field="${focus.field}"] select`)?.focus();
+    if (focus && pane.current) focusFromMenu(pane.current, focus.field);
   }, [focus, id]);
 
   return (
