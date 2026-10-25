@@ -235,6 +235,8 @@ describe('HubClient', () => {
     await waitFor(() => client.status().state === 'connected' && h.streams.size > 0, 'connected');
     expect(statuses.map((s) => s.state)).toEqual(['connecting', 'connected']);
     expect(h.hellos[0]?.cards.map((c) => c.id)).toEqual(['a', 'b']);
+    // No apply: the hello says the client is read-only, so the hub can show the board view only.
+    expect(h.hellos[0]?.readOnly).toBe(true);
     expect(h.received).toEqual([{ type: 'cards', cards: expect.arrayContaining([expect.objectContaining({ id: 'a' }), expect.objectContaining({ id: 'b' })]) }]);
     expect(mirrorDigests(h.mirror)).toEqual(cardDigests(files).sort((x, y) => (x.path < y.path ? -1 : 1)));
     expect(client.status().cards).toBe(2);
@@ -387,6 +389,7 @@ describe('HubClient', () => {
     open.push(client);
     client.start();
     await waitFor(() => h.streams.size === 1, 'stream');
+    expect(h.hellos[0]?.readOnly).toBe(false);
     const intent: HubIntent = { intentId: 'i1', baseHash: cardHash(file('a', '1').text), op: 'set', intent: { id: 'a', changes: { priority: 'high' } }, expect: { priority: null } };
     h.send({ type: 'intent', intent });
     await waitFor(() => h.received.some((m) => m.type === 'ack'), 'ack');

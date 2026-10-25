@@ -311,6 +311,7 @@ export class HubClient {
       ...(this.o.fieldsOnly ? { fieldsOnly: true } : {}),
       ...(assets && this.o.assets ? { assets, images: this.o.assets.images } : {}),
       ...(this.o.saveImage ? { uploads: true } : {}),
+      readOnly: !this.o.apply,
     };
     const answer = (await this.post(HUB_PATHS.hello, hello, { session: false })) as WelcomeMessage | RefusedMessage | null;
     if (!answer || answer.type !== 'welcome') throw new HubRequestError('The hub did not answer the hello with a welcome.');

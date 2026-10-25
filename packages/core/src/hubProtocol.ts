@@ -146,6 +146,15 @@ export type HelloMessage = {
    * Never from a read-only client. A hub without the feature ignores it.
    */
   uploads?: true;
+  /**
+   * Whether the client applies the hub's intents: false for the extension
+   * and `kanban sync --write`, true for `kanban sync` without it, which
+   * refuses every intent. A hub can then show the board view only instead of
+   * taking changes that will be refused. A hub without the field ignores it;
+   * a hub should treat a `cli` hello without it (from before --write) as
+   * read-only.
+   */
+  readOnly?: boolean;
 };
 
 /** Client → hub. */
